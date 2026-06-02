@@ -1,363 +1,47 @@
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
-<head><button onclick="solveBoard()">حل کن 🧠</button>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>بازی سودوکو</title>
-    <link rel="stylesheet" href="style.css">
-    <style>
-        /* استایل‌های اولیه برای نمایش پنل تنظیمات و صفحه برد */
-        /* این استایل‌ها باید با توجه به طراحی کلی شما تغییر کنند */
-        body {
-            font-family: 'Arial', sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start; /* تغییر از center به flex-start */
-            min-height: 100vh;
-            background-color: var(--background-color, #f4f7f6); /* استفاده از متغیر CSS */
-            margin: 0;
-            padding: 20px; /* اضافه کردن padding */
-            box-sizing: border-box;
-        }
- 
-        .main-content-wrapper {
-            display: flex;
-            flex-direction: row; /* چینش افقی برای بازی و پنل تنظیمات */
-            width: 100%;
-            max-width: 1200px; /* حداکثر عرض */
-            margin-top: 50px; /* فاصله از بالای صفحه */
-        }
-
-        #game-container {
-            flex: 3; /* فضای بیشتری به بازی اختصاص داده شود */
-            margin-left: 20px; /* فاصله بین بازی و پنل تنظیمات */
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        /* استایل‌های مربوط به صفحه برد */
-        #winOverlay {
-            position: fixed; /* ثابت در صفحه */
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000; /* بالاتر از همه چیز */
-        }
-
-        .win-overlay.hidden {
-            display: none;
-        }
-
-        .win-card {
-            background-color: white;
-            padding: 30px;
-            border-radius: 10px;
-            text-align: center;
-            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
-            position: relative;
-        }
-
-        .win-card h2 {
-            color: #4CAF50; /* سبز */
-            margin-bottom: 15px;
-        }
-
-        .win-card button {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            margin-top: 20px;
-        }
-
-        .win-card button:hover {
-            background-color: #45a049;
-        }
-
-        /* کانتینر ذرات confetti */
-        .confetti-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            pointer-events: none; /* جلوگیری از تداخل با کلیک‌ها */
-        }
-
-        /* پنل تنظیمات */
-        #settings-panel {
-            flex: 1; /* فضای کمتر نسبت به بازی */
-            background-color: #ffffff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            margin-right: 20px; /* فاصله از بازی */
-            height: fit-content; /* ارتفاع متناسب با محتوا */
-            position: sticky; /* برای چسبیدن به بالا هنگام اسکرول */
-            top: 80px; /* فاصله از بالای صفحه */
-        }
-
-        #settings-panel.collapsed {
-            display: none; /* اگر بخواهید مخفی شود */
-        }
-
-        #theme-settings {
-            display: flex;
-            flex-direction: column;
-            gap: 15px; /* فاصله بین عناصر */
-        }
-
-        #theme-settings h3 {
-            margin-top: 0;
-            color: #333;
-        }
-
-        #theme-settings div {
-            display: flex;
-            align-items: center;
-            justify-content: space-between; /* چیدمان افقی */
-        }
-
-        #theme-settings label {
-            margin-left: 10px; /* فاصله از پیکسل رنگ */
-            color: #555;
-            flex-shrink: 0; /* جلوگیری از کوچک شدن لیبل */
-        }
-
-        #theme-settings input[type="color"] {
-            width: 50px;
-            height: 30px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            padding: 2px; /* کمی padding برای خود پیکسل */
-            background-color: transparent; /* اطمینان از شفافیت */
-            box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1); /* حاشیه نازک */
-        }
-
-        #theme-settings button {
-            padding: 10px 15px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background-color 0.3s ease;
-        }
-
-        #save-theme-btn {
-            background-color: #2196F3; /* آبی */
-            color: white;
-        }
-
-        #save-theme-btn:hover {
-            background-color: #0b7dda;
-        }
-
-        #reset-theme-btn {
-            background-color: #f44336; /* قرمز */
-            color: white;
-            margin-top: 10px; /* فاصله بیشتر */
-        }
-
-        #reset-theme-btn:hover {
-            background-color: #d32f2f;
-        }
-
-        /* استایل‌های مربوط به خود بازی */
-        h1 {
-            text-align: center;
-            color: #333;
-            margin-bottom: 20px;
-        }
-
-        #menu {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        #menu button {
-            margin: 0 10px;
-            padding: 8px 15px;
-            cursor: pointer;
-            background-color: #e0e0e0;
-            border: none;
-            border-radius: 4px;
-        }
-        #menu button:hover {
-            background-color: #c0c0c0;
-        }
-
-        .info {
-            display: flex;
-            justify-content: space-around;
-            margin-bottom: 20px;
-            color: #555;
-        }
-
-        #timer {
-            text-align: center;
-            font-size: 1.2em;
-            margin-bottom: 20px;
-        }
-
-        #board {
-            display: grid;
-            grid-template-columns: repeat(9, 1fr);
-            grid-template-rows: repeat(9, 1fr);
-            gap: 2px;
-            width: 360px; /* اندازه جدول */
-            height: 360px; /* اندازه جدول */
-            margin: 0 auto; /* وسط چین کردن */
-            border: 2px solid #333;
-        }
-
-        .cell {
-            width: 40px;
-            height: 40px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 1.5em;
-            cursor: pointer;
-            border: 1px solid #ccc;
-            background-color: var(--cell-background, white); /* رنگ پس‌زمینه سلول */
-            color: var(--number-color, #333); /* رنگ اعداد */
-        }
-
-        .cell.selected {
-            background-color: var(--selected-cell-background, #e0e7ff); /* پس‌زمینه خانه انتخاب شده */
-        }
-
-        .cell.predefined {
-            font-weight: bold;
-            color: var(--predefined-number-color, #000); /* رنگ اعداد از پیش تعیین شده */
-        }
-
-        .cell.pencil-mark {
-            font-size: 0.8em;
-            color: var(--pencil-mark-color, #999);
-        }
-
-        /* استایل برای Confetti (این یک مثال خیلی ساده است) */
-        .confetti {
-            position: absolute;
-            width: 10px;
-            height: 10px;
-            background-color: var(--confetti-color-1, #ADD8E6); /* رنگ اول */
-            opacity: 0.8;
-            animation: fall 2s infinite ease-out;
-        }
-        .confetti.c2 { background-color: var(--confetti-color-2, #FFB6C1); } /* رنگ دوم */
-        .confetti.c3 { background-color: var(--confetti-color-3, #90EE90); } /* رنگ سوم */
-
-        @keyframes fall {
-            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
-            100% { transform: translateY(500px) rotate(360deg); opacity: 0; }
-        }
-    </style>
+<head>
+<meta charset="UTF-8">
+<title>Sudoku Ultimate</title>
+<link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
-    <!-- صفحه پیروزی -->
-    <div id="winOverlay" class="win-overlay hidden">
-        <div class="win-card">
-          <h2>🎉 آفرین! برنده شدی 🎉</h2>
-          <p>سودوکو با موفقیت کامل شد.</p>
-          <button id="closeWin">باشه</button>
-          <div class="confetti-container" id="confettiContainer"></div>
-        </div>
-    </div>
+<h1>🧩 Sudoku Ultimate</h1>
 
-    <div class="main-content-wrapper">
-        <!-- محتوای اصلی بازی شما -->
-        <div id="game-container">
-            <h1>Sudoku Game</h1>
+<div class="top-bar">
+  <button onclick="startGame('easy')">آسان</button>
+  <button onclick="startGame('medium')">متوسط</button>
+  <button onclick="startGame('hard')">سخت</button>
+  <button onclick="toggleSettings()">⚙ تنظیمات</button>
+</div>
 
-            <div id="menu">
-                <button onclick="startGame('easy')">بازی آسان</button>
-                <button onclick="startGame('medium')">بازی متوسط</button>
-                <button onclick="startGame('hard')">بازی سخت</button>
-                <button onclick="continueGame()">ادامه بازی</button>
-            </div>
+<div class="info">
+  ⭐ <span id="score">0</span>
+  ❌ <span id="errors">0</span>
+  ⏱ <span id="timer">0</span>
+</div>
 
-            <div class="info">
-                <span>Score: <span id="score">0</span></span>
-                <span>Errors: <span id="errors">0</span></span>
-                <span>Lives: <span id="lives">❤️❤️❤️</span></span>
-            </div>
+<div id="board"></div>
 
-            <div id="message"></div>
-            <div id="floatingMessage"></div>
-            <div id="timer">Time: 0</div>
-            <div id="progress">
-                پیشرفت: <span id="progressValue">0</span>%
-                </div>
+<!-- SETTINGS -->
+<div id="settings" class="settings hidden">
+  <h2>🎨 تنظیمات ظاهر</h2>
 
-            <div id="board">
-                <!-- سلول‌های جدول سودوکو اینجا توسط جاوااسکریپت ایجاد می‌شوند -->
-                <!-- مثال: -->
-                <!-- <div class="cell predefined">5</div> -->
-                <!-- <div class="cell"></div> -->
-            </div>
-        </div>
+  <label>پس‌زمینه</label>
+  <input type="color" id="bgColor">
 
-        <!-- پنل تنظیمات تم -->
-        <aside id="settings-panel">
-             <div id="theme-settings">
-               <h3>شخصی‌سازی تم</h3>
+  <label>باکس جدول</label>
+  <input type="color" id="cellColor">
 
-               <div>
-                 <label for="bg-color-picker">پس‌زمینه:</label>
-                 <!-- مقدار value و data-css-var را مطابق با CSS خود تنظیم کنید -->
-                 <input type="color" id="bg-color-picker" value="#f4f7f6" data-css-var="--background-color">
-               </div>
-               <div>
-                 <label for="num-color-picker">اعداد اصلی:</label>
-                 <input type="color" id="num-color-picker" value="#333333" data-css-var="--number-color">
-               </div>
-               <div>
-                 <label for="selected-bg-picker">خانه انتخاب شده:</label>
-                 <input type="color" id="selected-bg-picker" value="#e0e7ff" data-css-var="--selected-cell-background">
-               </div>
-               <div>
-                 <label for="confetti-color1-picker">Confetti 1:</label>
-                 <input type="color" id="confetti-color1-picker" value="#ADD8E6" data-css-var="--confetti-color-1">
-               </div>
-               <div>
-                 <label for="confetti-color2-picker">Confetti 2:</label>
-                 <input type="color" id="confetti-color2-picker" value="#FFB6C1" data-css-var="--confetti-color-2">
-               </div>
-               <div>
-                 <label for="confetti-color3-picker">Confetti 3:</label>
-                 <input type="color" id="confetti-color3-picker" value="#90EE90" data-css-var="--confetti-color-3">
-               </div>
-               <div>
-                 <label for="predefined-num-color-picker">اعداد از پیش تعیین شده:</label>
-                 <input type="color" id="predefined-num-color-picker" value="#000000" data-css-var="--predefined-number-color">
-               </div>
-               <div>
-                 <label for="pencil-mark-color-picker">اعداد مدادی:</label>
-                 <input type="color" id="pencil-mark-color-picker" value="#999999" data-css-var="--pencil-mark-color">
-               </div>
+  <label>رنگ عددها</label>
+  <input type="color" id="textColor">
 
+  <button onclick="applySettings()">ذخیره</button>
+  <button onclick="resetSettings()">ریست</button>
+</div>
 
-               <button id="save-theme-btn">ذخیره تنظیمات</button>
-               <button id="reset-theme-btn">بازگشت به پیش‌فرض</button>
-             </div>
-        </aside>
-    </div>
-
-    <script src="script.js"></script>
+<script src="script.js"></script>
 </body>
 </html>

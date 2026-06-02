@@ -1,263 +1,48 @@
-:root {:root {#floatingMessage{
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  padding: 12px 20px;
-  border-radius: 10px;
-  font-weight: bold;
-  opacity: 0;
-  transition: 0.4s;
-  z-index: 9999;
-}
-
-#floatingMessage.show{
-  opacity: 1;
-}
-
-.success-msg{
-  background:#00c853;
+body{
+  margin:0;
+  font-family:tahoma;
+  text-align:center;
+  background:var(--bg,#001f4d);
   color:white;
 }
 
-.error-msg{
-  background:#d50000;
-  color:white;
-}
-  --board-border-color: rgba(255,255,255,0.4);
-}
-  --background-color: #001f4d;
-  --secondary-background: #003b8e;
-
-  --cell-border-color: rgba(255,255,255,0.3);
-
-  --cell-background: #001f4d;
-
-  --prefilled-background: rgba(255,255,255,0.35);
-
-  --number-color: white;
-  --predefined-number-color: white;
-
-  --selected-cell-background: rgba(0,70,255,0.95);
-
-  --card-bg: #003b8e;
-  --text-color: white;
+.top-bar button{
+  margin:5px;
+  padding:8px 12px;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
 }
 
-body {
-  font-family: Arial, sans-serif;
-  text-align: center;
-  margin: 0;
-  padding: 0;
-  background: linear-gradient(135deg, var(--background-color), var(--secondary-background));
-  color: var(--number-color);
+#board{
+  display:grid;
+  grid-template-columns:repeat(9,40px);
+  justify-content:center;
+  margin:20px auto;
 }
 
-h1 {
-  margin-top: 20px;
-  font-size: 32px;
+.cell{
+  width:40px;
+  height:40px;
+  text-align:center;
+  font-size:18px;
+  border:1px solid rgba(255,255,255,0.3);
+  background:var(--cell,rgba(255,255,255,0.05));
+  color:var(--text,white);
 }
 
-button {
-  margin-top: 10px;
-  padding: 10px 20px;
-  border: none;
-  background: #ffffff;
-  color: #003b8e;
-  font-weight: bold;
-  cursor: pointer;
-  border-radius: 8px;
+.prefilled{
+  background:rgba(255,255,255,0.2);
+  font-weight:bold;
 }
 
-button:hover {
-  background: #dbe9ff;
+.settings{
+  position:fixed;
+  top:20px;
+  right:20px;
+  background:#111;
+  padding:15px;
+  border-radius:10px;
 }
 
-/* BOARD */
-#board {
-  display: grid;
-  grid-template-columns: repeat(9, 45px);
-  grid-template-rows: repeat(9, 45px);
-  justify-content: center;
-  margin: 30px auto;
-
-  border-radius: 10px;
-  padding: 5px;
-}
-
-/*CELLS */
-.cell {
-  width: 45px;
-  height: 45px;
-  text-align: center;
-  font-size: 18px;
-  border: 1px solid var(--cell-border-color);
-  background: var(--cell-background); /* این خط سلول‌ها را آبی پررنگ می‌کند */
-  color: var(--number-color);
-  outline: none;
-  box-sizing: border-box;
-}
-.cell {
-  background:var(--cell-background);
-}
-/* prefilled */
-.prefilled {
-  background: var(--prefilled-background);
-  font-weight: bold;
-}
-
-/* INFO */
-.info {
-  margin-top: 15px;
-  display: flex;
-  justify-content: center;
-  gap: 30px;
-  font-size: 20px;
-  font-weight: bold;
-}
-
-/* MESSAGE */
-#message {
-  margin-top: 10px;
-  height: 30px;
-  font-size: 22px;
-  font-weight: bold;
-}
-
-/* CORRECT / WRONG */
-.correct {
-  background: rgba(0,255,0,0.35) !important;
-}
-
-.wrong {
-  background: rgba(255,0,0,0.35) !important;
-}
-
-/* 🔥 Sudoku 3x3 bold borders */
-.cell:nth-child(3n) {
-  border-right: 2px solid white;
-}
-
-.cell:nth-child(n+19):nth-child(-n+27),
-.cell:nth-child(n+46):nth-child(-n+54) {
-  border-bottom: 2px solid white;
-}
-
-
-/* win-overlay */
-.win-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 9999;
-}
-
-.hidden {
-  display: none !important;
-}
-
-.win-card {
-  position: relative;
-  background: var(--card-bg, #fff);
-  color: var(--text-color, #222);
-  padding: 28px 24px;
-  border-radius: 18px;
-  min-width: 280px;
-  max-width: 90vw;
-  text-align: center;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
-  overflow: hidden;
-  animation: popIn 0.35s ease-out;
-}
-
-.win-card h2 {
-  margin: 0 0 10px;
-  font-size: 1.6rem;
-}
-
-.win-card p {
-  margin: 0 0 18px;
-  opacity: 0.85;
-}
-
-.win-card button {
-  border: none;
-  background: #4f46e5;
-  color: white;
-  padding: 10px 18px;
-  border-radius: 12px;
-  cursor: pointer;
-  font-size: 1rem;
-}
-
-.win-card button:hover {
-  filter: brightness(1.05);
-}
-
-@keyframes popIn {
-  from {
-    transform: scale(0.8);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-.confetti-container {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.confetti-piece {
-  position: absolute;
-  top: -12px;
-  width: 10px;
-  height: 18px;
-  opacity: 0.95;
-  animation-name: confettiFall;
-  animation-timing-function: linear;
-  animation-iteration-count: 1;
-}
-body {
-  background:var(--background-color);
-}
-
-/* پس‌زمینه کل صفحه کنار جدول */
-.main-content-wrapper {
-  background: #001f4d;
-  min-height: 100vh;
-
-
-
-
-  color: var(--number-color) !important;
-}
-#leaderboard {
-  margin-top: 20px;
-  background: rgba(255, 255, 255, 0.105);
-  padding: 15px;
-  border-radius: 10px;
-  width: 300px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-#leaderboard h3 {
-  margin-top: 0;
-  color: gold;
-}
-
-#recordsList {
-  text-align: right;
-  padding-right: 20px;
-}
-
-#recordsList li {
-  margin: 5px 0;
-}
+.hidden{display:none;}
