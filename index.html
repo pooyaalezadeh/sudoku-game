@@ -1,47 +1,219 @@
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<title>Sudoku Ultimate</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#07152f">
+  <title>Sudoku Ultimate</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
-<h1>🧩 Sudoku Ultimate</h1>
+<div class="app">
 
-<div class="top-bar">
-  <button onclick="startGame('easy')">آسان</button>
-  <button onclick="startGame('medium')">متوسط</button>
-  <button onclick="startGame('hard')">سخت</button>
-  <button onclick="toggleSettings()">⚙ تنظیمات</button>
+  <header class="header">
+    <div>
+      <div class="logo">🧩 Sudoku Ultimate</div>
+      <div class="subtitle">بازی حرفه‌ای سودوکو</div>
+    </div>
+
+    <button class="icon-btn" onclick="toggleSettings()" aria-label="تنظیمات">
+      ⚙️
+    </button>
+  </header>
+
+  <section class="stats">
+
+    <div class="stat-card">
+      <span>⭐</span>
+      <div>
+        <small>امتیاز</small>
+        <strong id="score">0</strong>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <span>❌</span>
+      <div>
+        <small>خطا</small>
+        <strong id="errors">0 / 3</strong>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <span>⏱️</span>
+      <div>
+        <small>زمان</small>
+        <strong id="timer">00:00</strong>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <span>🏆</span>
+      <div>
+        <small>رکورد</small>
+        <strong id="bestTime">--:--</strong>
+      </div>
+    </div>
+
+  </section>
+
+  <section class="difficulty">
+    <button class="difficulty-btn active" data-level="easy" onclick="startGame('easy')">
+      🟢 آسان
+    </button>
+
+    <button class="difficulty-btn" data-level="medium" onclick="startGame('medium')">
+      🟡 متوسط
+    </button>
+
+    <button class="difficulty-btn" data-level="hard" onclick="startGame('hard')">
+      🔴 سخت
+    </button>
+
+    <button class="difficulty-btn" data-level="expert" onclick="startGame('expert')">
+      🟣 خیلی سخت
+    </button>
+  </section>
+
+  <main>
+
+    <div class="game-toolbar">
+
+      <button onclick="newGame()">
+        🔄 بازی جدید
+      </button>
+
+      <button onclick="undoMove()">
+        ↩️ بازگشت
+      </button>
+
+      <button onclick="useHint()">
+        💡 راهنما
+      </button>
+
+      <button onclick="toggleNotes()" id="notesBtn">
+        📝 یادداشت
+      </button>
+
+      <button onclick="pauseGame()">
+        ⏸️ توقف
+      </button>
+
+    </div>
+
+    <div id="pauseOverlay" class="pause-overlay hidden">
+      <div class="pause-box">
+        <div>⏸️</div>
+        <h2>بازی متوقف شد</h2>
+        <button onclick="pauseGame()">ادامه بازی</button>
+      </div>
+    </div>
+
+    <div id="board"></div>
+
+    <div class="number-pad">
+
+      <button onclick="selectNumber(1)">1</button>
+      <button onclick="selectNumber(2)">2</button>
+      <button onclick="selectNumber(3)">3</button>
+      <button onclick="selectNumber(4)">4</button>
+      <button onclick="selectNumber(5)">5</button>
+      <button onclick="selectNumber(6)">6</button>
+      <button onclick="selectNumber(7)">7</button>
+      <button onclick="selectNumber(8)">8</button>
+      <button onclick="selectNumber(9)">9</button>
+
+      <button class="erase" onclick="eraseCell()">⌫ پاک کردن</button>
+
+    </div>
+
+    <section class="bottom-panel">
+
+      <div class="progress-box">
+        <div class="progress-title">
+          <span>پیشرفت بازی</span>
+          <strong id="progressText">0%</strong>
+        </div>
+
+        <div class="progress">
+          <div id="progressBar"></div>
+        </div>
+      </div>
+
+      <div class="tips">
+        💡 برای شروع یک خانه خالی را انتخاب کنید.
+      </div>
+
+    </section>
+
+  </main>
+
 </div>
-
-<div class="info">
-  ⭐ <span id="score">0</span>
-  ❌ <span id="errors">0</span>
-  ⏱ <span id="timer">0</span>
-</div>
-
-<div id="board"></div>
 
 <!-- SETTINGS -->
 <div id="settings" class="settings hidden">
-  <h2>🎨 تنظیمات ظاهر</h2>
 
-  <label>پس‌زمینه</label>
-  <input type="color" id="bgColor">
+  <div class="settings-box">
 
-  <label>باکس جدول</label>
-  <input type="color" id="cellColor">
+    <button class="close-settings" onclick="toggleSettings()">✕</button>
 
-  <label>رنگ عددها</label>
-  <input type="color" id="textColor">
+    <h2>⚙️ تنظیمات</h2>
 
-  <button onclick="applySettings()">ذخیره</button>
-  <button onclick="resetSettings()">ریست</button>
+    <label>🎨 رنگ پس‌زمینه</label>
+    <input type="color" id="bgColor" value="#07152f">
+
+    <label>⬜ رنگ خانه‌ها</label>
+    <input type="color" id="cellColor" value="#102650">
+
+    <label>🔢 رنگ عددها</label>
+    <input type="color" id="textColor" value="#ffffff">
+
+    <button class="save-settings" onclick="applySettings()">
+      💾 ذخیره تنظیمات
+    </button>
+
+    <button class="reset-settings" onclick="resetSettings()">
+      🔄 بازگردانی تنظیمات
+    </button>
+
+  </div>
+
+</div>
+
+<!-- WIN MODAL -->
+<div id="winModal" class="modal hidden">
+
+  <div class="modal-box">
+
+    <div class="win-icon">🏆</div>
+
+    <h2>تبریک! 🎉</h2>
+
+    <p>سودوکو را با موفقیت حل کردی!</p>
+
+    <div class="result">
+      <div>
+        <span>امتیاز</span>
+        <strong id="finalScore">0</strong>
+      </div>
+
+      <div>
+        <span>زمان</span>
+        <strong id="finalTime">00:00</strong>
+      </div>
+    </div>
+
+    <button onclick="closeWinModal(); newGame()">
+      🎮 بازی جدید
+    </button>
+
+  </div>
+
 </div>
 
 <script src="script.js"></script>
+
 </body>
 </html>
