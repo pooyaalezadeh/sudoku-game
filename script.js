@@ -1601,3 +1601,51 @@ document.addEventListener(
     loadGame();
   }
 );
+// ===============================
+// 🔊 SIMPLE AUDIO TEST
+// ===============================
+
+document.addEventListener("click", function () {
+
+    const AudioContext =
+        window.AudioContext ||
+        window.webkitAudioContext;
+
+    if (!AudioContext) {
+        alert("مرورگر شما از صدا پشتیبانی نمی‌کند.");
+        return;
+    }
+
+    const audio = new AudioContext();
+
+    audio.resume().then(() => {
+
+        const oscillator = audio.createOscillator();
+        const gain = audio.createGain();
+
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(800, audio.currentTime);
+
+        gain.gain.setValueAtTime(0.3, audio.currentTime);
+        gain.gain.exponentialRampToValueAtTime(
+            0.001,
+            audio.currentTime + 0.6
+        );
+
+        oscillator.connect(gain);
+        gain.connect(audio.destination);
+
+        oscillator.start();
+        oscillator.stop(audio.currentTime + 0.6);
+
+        console.log("🔊 SOUND TEST OK");
+
+    }).catch(error => {
+
+        console.error("Audio Error:", error);
+
+        alert("خطای صدا: " + error.message);
+
+    });
+
+}, { once: true });
