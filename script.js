@@ -1,920 +1,725 @@
-const boardEl = document.getElementById("board");
-const scoreEl = document.getElementById("score");
-const errorsEl = document.getElementById("errors");
-const timerEl = document.getElementById("timer");
-const bestTimeEl = document.getElementById("bestTime");
-const progressBar = document.getElementById("progressBar");
-const progressText = document.getElementById("progressText");
+// ===============================
+// SUDOKU ULTIMATE - PRO VERSION
+// ===============================
 
-let board = [];
+const SIZE = 9;
+const BOX = 3;
+const MAX_ERRORS = 3;
+
+// ---------- Game State ----------
 let solution = [];
-let originalBoard = [];
-
-let selectedCell = null;
-let score = 0;
-let errors = 0;
-let time = 0;
-let timer = null;
-
-let currentLevel = "easy";
-let notesMode = false;
-let paused = false;
-let gameFinished = false;
-
-let history = [];
-
-let notes = Array.from(
-  { length: 81 },
-  () => new Set()
+let puzzle = [];
+let board = [];
+let notes = Array.from({ length: 9 }, () =>
+  Array.from({ length: 9 }, () => new Set())
 );
 
-/* =========================
-   DIFFICULTY
-========================= */
+let history = [];
+let selectedRow = -1;
+let selectedCol = -1;
 
-const difficulty = {
+let difficulty = "easy";
+let errors = 0;
+let score = 0;
+let seconds = 0;
+let timerInterval = null;
+let paused = false;
+let notesMode = false;
+let soundEnabled = true;
+let musicEnabled = false;
+
+let audioContext = null;
+let musicTimer = null;
+
+// ---------- Difficulty ----------
+const difficultySettings = {
   easy: 38,
   medium: 31,
   hard: 25,
   expert: 21
 };
 
-/* =========================
-   START GAME
-========================= */
+// ---------- DOM ----------
+const boardEl = document.getElementById("board");
+const scoreEl = document.getElementById("score");
+const errorsEl = document.getElementById("errors");
+const timerEl = document.getElementById("timer");
+const bestTimeEl = document.getElementById("best-time");
+const progressEl = document.getElementById("progress");
+const progressTextEl = document.getElementById("progress-text");
 
-function startGame(level = "easy") {
+// ===============================
+// AUDIO SYSTEM
+// ===============================
 
-  currentLevel = level;
+function initAudio() {
+  if (!audioContext) {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
 
-  document.querySelectorAll(".difficulty-btn").forEach(btn => {
-    btn.classList.toggle(
-      "active",
-      btn.dataset.level === level
-    );
+    if (AudioCtx) {
+      audioContext = new AudioCtx();
+    }
+  }
+
+  if (audioContext && audioContext.state === "suspended") {
+    audioContext.resume();
+  }
+}
+
+function playTone(frequency, duration = 0.08, type = "sine", volume = 0.04) {
+  if (!soundEnabled) return;
+
+  initAudio();
+
+  if (!audioContext) return;
+
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(
+    frequency,
+    audioContext.currentTime
+  );
+
+  gain.gain.setValueAtTime(volume, audioContext.currentTime);
+
+  gain.gain.exponentialRampToValueAtTime(
+    0.001,
+    audioContext.currentTime + duration
+  );
+
+  oscillator.connect(gain);
+  gain.connect(audioContext.destination);
+
+  oscillator.start();
+
+  oscillator.stop(audioContext.currentTime + duration);
+}
+
+// ---------- UI Click ----------
+function playClickSound() {
+  playTone(520, 0.06, "sine", 0.035);
+}
+
+// ---------- Correct ----------
+function playCorrectSound() {
+  if (!soundEnabled) return;
+
+  initAudio();
+
+  playTone(523.25, 0.08, "sine", 0.04);
+
+  setTimeout(() => {
+    playTone(659.25, 0.1, "sine", 0.045);
+  }, 70);
+
+  setTimeout(() => {
+    playTone(783.99, 0.14, "sine", 0.05);
+  }, 140);
+}
+
+// ---------- Wrong ----------
+function playWrongSound() {
+  if (!soundEnabled) return;
+
+  initAudio();
+
+  playTone(220, 0.12, "sawtooth", 0.035);
+
+  setTimeout(() => {
+    playTone(165, 0.16, "sawtooth", 0.03);
+  }, 100);
+}
+
+// ---------- Hint ----------
+function playHintSound() {
+  if (!soundEnabled) return;
+
+  playTone(392, 0.08, "sine", 0.035);
+
+  setTimeout(() => {
+    playTone(523.25, 0.12, "sine", 0.04);
+  }, 90);
+}
+
+// ---------- Win ----------
+function playWinSound() {
+  if (!soundEnabled) return;
+
+  const melody = [
+    [523.25, 0],
+    [659.25, 120],
+    [783.99, 240],
+    [1046.5, 380]
+  ];
+
+  melody.forEach(([frequency, delay]) => {
+    setTimeout(() => {
+      playTone(frequency, 0.18, "sine", 0.055);
+    }, delay);
   });
-
-  newGame();
 }
 
-/* =========================
-   NEW GAME
-========================= */
-
-function newGame() {
-
-  clearInterval(timer);
-
-  score = 0;
-  errors = 0;
-  time = 0;
-
-  selectedCell = null;
-  paused = false;
-  gameFinished = false;
-
-  history = [];
-
-  notes = Array.from(
-    { length: 81 },
-    () => new Set()
-  );
-
-  solution = generateSolution();
-
-  board = solution.map(row => [...row]);
-
-  removeNumbers(
-    board,
-    difficulty[currentLevel]
-  );
-
-  originalBoard = board.map(row => [...row]);
-
-  updateStats();
-  renderBoard();
-  startTimer();
-  saveGame();
+// ---------- Pause ----------
+function playPauseSound() {
+  playTone(330, 0.08, "sine", 0.03);
 }
 
-/* =========================
-   GENERATE SUDOKU
-========================= */
+// ===============================
+// BACKGROUND MUSIC
+// ===============================
 
-function generateSolution() {
+function startMusic() {
+  if (!musicEnabled) return;
 
-  const grid = Array.from(
-    { length: 9 },
-    () => Array(9).fill(0)
-  );
+  stopMusic();
 
-  solveGrid(grid);
+  const melody = [
+    261.63,
+    329.63,
+    392.0,
+    329.63,
+    293.66,
+    349.23,
+    440.0,
+    349.23
+  ];
 
-  return grid;
-}
+  let index = 0;
 
-function solveGrid(grid) {
+  musicTimer = setInterval(() => {
+    if (!paused && musicEnabled && soundEnabled) {
+      playTone(
+        melody[index],
+        0.45,
+        "sine",
+        0.012
+      );
 
-  const empty = findEmpty(grid);
+      index++;
 
-  if (!empty) {
-    return true;
-  }
-
-  const [row, col] = empty;
-
-  const numbers = shuffle([
-    1,2,3,4,5,6,7,8,9
-  ]);
-
-  for (const num of numbers) {
-
-    if (
-      isValidMove(
-        grid,
-        row,
-        col,
-        num
-      )
-    ) {
-
-      grid[row][col] = num;
-
-      if (solveGrid(grid)) {
-        return true;
+      if (index >= melody.length) {
+        index = 0;
       }
-
-      grid[row][col] = 0;
     }
-  }
-
-  return false;
+  }, 520);
 }
 
-/* =========================
-   FIND EMPTY
-========================= */
-
-function findEmpty(grid) {
-
-  for (let row = 0; row < 9; row++) {
-
-    for (let col = 0; col < 9; col++) {
-
-      if (grid[row][col] === 0) {
-        return [row, col];
-      }
-
-    }
+function stopMusic() {
+  if (musicTimer) {
+    clearInterval(musicTimer);
+    musicTimer = null;
   }
-
-  return null;
 }
 
-/* =========================
-   VALIDATE MOVE
-========================= */
+// ===============================
+// SUDOKU GENERATOR
+// ===============================
 
-function isValidMove(
-  grid,
-  row,
-  col,
-  num
-) {
+function shuffle(array) {
+  const arr = [...array];
 
-  for (let c = 0; c < 9; c++) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
 
-    if (
-      c !== col &&
-      grid[row][c] === num
-    ) {
-      return false;
-    }
+    [arr[i], arr[j]] = [arr[j], arr[i]];
   }
 
-  for (let r = 0; r < 9; r++) {
+  return arr;
+}
 
-    if (
-      r !== row &&
-      grid[r][col] === num
-    ) {
-      return false;
-    }
+function isSafe(grid, row, col, num) {
+  for (let i = 0; i < 9; i++) {
+    if (grid[row][i] === num) return false;
+    if (grid[i][col] === num) return false;
   }
 
-  const startRow =
-    Math.floor(row / 3) * 3;
+  const startRow = Math.floor(row / 3) * 3;
+  const startCol = Math.floor(col / 3) * 3;
 
-  const startCol =
-    Math.floor(col / 3) * 3;
-
-  for (
-    let r = startRow;
-    r < startRow + 3;
-    r++
-  ) {
-
-    for (
-      let c = startCol;
-      c < startCol + 3;
-      c++
-    ) {
-
-      if (
-        (r !== row || c !== col) &&
-        grid[r][c] === num
-      ) {
-        return false;
-      }
-
+  for (let r = startRow; r < startRow + 3; r++) {
+    for (let c = startCol; c < startCol + 3; c++) {
+      if (grid[r][c] === num) return false;
     }
   }
 
   return true;
 }
 
-/* =========================
-   REMOVE NUMBERS
-========================= */
+function fillGrid(grid) {
+  for (let row = 0; row < 9; row++) {
+    for (let col = 0; col < 9; col++) {
 
-function removeNumbers(grid, clues) {
+      if (grid[row][col] === 0) {
 
-  const cells = [];
+        const numbers = shuffle([
+          1, 2, 3, 4, 5, 6, 7, 8, 9
+        ]);
 
-  for (let i = 0; i < 81; i++) {
-    cells.push(i);
+        for (const num of numbers) {
+
+          if (isSafe(grid, row, col, num)) {
+
+            grid[row][col] = num;
+
+            if (fillGrid(grid)) {
+              return true;
+            }
+
+            grid[row][col] = 0;
+          }
+        }
+
+        return false;
+      }
+    }
   }
 
-  shuffle(cells);
-
-  const removeCount = 81 - clues;
-
-  for (
-    let i = 0;
-    i < removeCount;
-    i++
-  ) {
-
-    const index = cells[i];
-
-    const row =
-      Math.floor(index / 9);
-
-    const col =
-      index % 9;
-
-    grid[row][col] = 0;
-  }
+  return true;
 }
 
-/* =========================
-   RENDER BOARD
-========================= */
+function generateSolution() {
+  const grid = Array.from({ length: 9 }, () =>
+    Array(9).fill(0)
+  );
+
+  fillGrid(grid);
+
+  return grid;
+}
+
+// ===============================
+// CREATE PUZZLE
+// ===============================
+
+function createPuzzle(fullGrid, clues) {
+
+  const result = fullGrid.map(row => [...row]);
+
+  let cellsToRemove = 81 - clues;
+
+  const positions = [];
+
+  for (let r = 0; r < 9; r++) {
+    for (let c = 0; c < 9; c++) {
+      positions.push([r, c]);
+    }
+  }
+
+  const shuffled = shuffle(positions);
+
+  for (let i = 0; i < cellsToRemove; i++) {
+    const [r, c] = shuffled[i];
+
+    result[r][c] = 0;
+  }
+
+  return result;
+}
+
+// ===============================
+// NEW GAME
+// ===============================
+
+function newGame() {
+
+  stopTimer();
+
+  solution = generateSolution();
+
+  puzzle = createPuzzle(
+    solution,
+    difficultySettings[difficulty]
+  );
+
+  board = puzzle.map(row => [...row]);
+
+  notes = Array.from({ length: 9 }, () =>
+    Array.from({ length: 9 }, () => new Set())
+  );
+
+  history = [];
+
+  selectedRow = -1;
+  selectedCol = -1;
+
+  errors = 0;
+  score = 0;
+  seconds = 0;
+  paused = false;
+  notesMode = false;
+
+  updateStats();
+  renderBoard();
+  startTimer();
+  updateBestTime();
+
+  saveGame();
+
+  playClickSound();
+}
+
+// ===============================
+// RENDER BOARD
+// ===============================
 
 function renderBoard() {
 
+  if (!boardEl) return;
+
   boardEl.innerHTML = "";
 
-  for (let i = 0; i < 81; i++) {
+  for (let row = 0; row < 9; row++) {
 
-    const row =
-      Math.floor(i / 9);
+    for (let col = 0; col < 9; col++) {
 
-    const col =
-      i % 9;
+      const cell = document.createElement("div");
 
-    const cell =
-      document.createElement("div");
+      cell.className = "cell";
 
-    cell.className = "cell";
+      cell.dataset.row = row;
+      cell.dataset.col = col;
 
-    cell.dataset.index = i;
-    cell.dataset.row = row;
-    cell.dataset.col = col;
+      const value = board[row][col];
 
-    if (
-      originalBoard[row][col] !== 0
-    ) {
+      if (value !== 0) {
 
-      cell.textContent =
-        originalBoard[row][col];
+        cell.textContent = value;
 
-      cell.classList.add(
-        "prefilled"
-      );
+        if (puzzle[row][col] !== 0) {
+          cell.classList.add("fixed");
+        } else {
+          cell.classList.add("user-number");
+        }
+      }
 
-    } else if (
-      board[row][col] !== 0
-    ) {
+      // Selected
+      if (
+        row === selectedRow &&
+        col === selectedCol
+      ) {
+        cell.classList.add("selected");
+      }
 
-      cell.textContent =
-        board[row][col];
+      // Same row / column / box
+      if (selectedRow !== -1 && selectedCol !== -1) {
+
+        if (
+          row === selectedRow ||
+          col === selectedCol ||
+          (
+            Math.floor(row / 3) === Math.floor(selectedRow / 3) &&
+            Math.floor(col / 3) === Math.floor(selectedCol / 3)
+          )
+        ) {
+          cell.classList.add("highlight");
+        }
+
+        if (
+          value !== 0 &&
+          value === board[selectedRow][selectedCol]
+        ) {
+          cell.classList.add("same-number");
+        }
+      }
+
+      // Notes
+      if (value === 0 && notes[row][col].size > 0) {
+
+        const notesContainer =
+          document.createElement("div");
+
+        notesContainer.className = "notes";
+
+        for (let n = 1; n <= 9; n++) {
+
+          const note =
+            document.createElement("span");
+
+          note.textContent =
+            notes[row][col].has(n) ? n : "";
+
+          notesContainer.appendChild(note);
+        }
+
+        cell.appendChild(notesContainer);
+      }
+
+      cell.addEventListener("click", () => {
+
+        if (paused) return;
+
+        initAudio();
+
+        selectedRow = row;
+        selectedCol = col;
+
+        playClickSound();
+
+        renderBoard();
+      });
+
+      boardEl.appendChild(cell);
     }
-
-    renderNotes(cell, i);
-
-    cell.addEventListener(
-      "click",
-      () => selectCell(i)
-    );
-
-    boardEl.appendChild(cell);
   }
 
-  updateHighlights();
   updateProgress();
 }
 
-/* =========================
-   RENDER NOTES
-========================= */
+// ===============================
+// ENTER NUMBER
+// ===============================
 
-function renderNotes(cell, index) {
+function enterNumber(num) {
+
+  if (paused) return;
 
   if (
-    notes[index].size === 0 ||
-    board[
-      Math.floor(index / 9)
-    ][index % 9] !== 0
+    selectedRow === -1 ||
+    selectedCol === -1
   ) {
     return;
   }
 
-  const notesBox =
-    document.createElement("div");
+  const row = selectedRow;
+  const col = selectedCol;
 
-  notesBox.className = "notes";
-
-  for (let n = 1; n <= 9; n++) {
-
-    const note =
-      document.createElement("span");
-
-    note.className = "note";
-
-    if (notes[index].has(n)) {
-      note.textContent = n;
-    }
-
-    notesBox.appendChild(note);
-  }
-
-  cell.appendChild(notesBox);
-}
-
-/* =========================
-   SELECT CELL
-========================= */
-
-function selectCell(index) {
-
-  if (
-    paused ||
-    gameFinished
-  ) {
+  // Fixed cell
+  if (puzzle[row][col] !== 0) {
+    playWrongSound();
     return;
   }
 
-  const row =
-    Math.floor(index / 9);
-
-  const col =
-    index % 9;
-
-  selectedCell = index;
-
-  updateHighlights();
-
-  if (
-    originalBoard[row][col] !== 0
-  ) {
-    return;
-  }
-}
-
-/* =========================
-   HIGHLIGHTS
-========================= */
-
-function updateHighlights() {
-
-  const cells =
-    document.querySelectorAll(".cell");
-
-  cells.forEach(cell => {
-
-    cell.classList.remove(
-      "selected",
-      "highlight",
-      "same-number"
-    );
-
-  });
-
-  if (selectedCell === null) {
-    return;
-  }
-
-  const selected =
-    cells[selectedCell];
-
-  if (!selected) {
-    return;
-  }
-
-  const row =
-    Number(selected.dataset.row);
-
-  const col =
-    Number(selected.dataset.col);
-
-  const selectedValue =
-    board[row][col];
-
-  cells.forEach(cell => {
-
-    const r =
-      Number(cell.dataset.row);
-
-    const c =
-      Number(cell.dataset.col);
-
-    const sameBox =
-      Math.floor(r / 3) === Math.floor(row / 3) &&
-      Math.floor(c / 3) === Math.floor(col / 3);
-
-    if (
-      r === row ||
-      c === col ||
-      sameBox
-    ) {
-
-      cell.classList.add(
-        "highlight"
-      );
-    }
-
-    if (
-      selectedValue !== 0 &&
-      board[r][c] === selectedValue
-    ) {
-
-      cell.classList.add(
-        "same-number"
-      );
-    }
-
-  });
-
-  selected.classList.add(
-    "selected"
-  );
-}
-
-/* =========================
-   SELECT NUMBER
-========================= */
-
-function selectNumber(num) {
-
-  if (
-    selectedCell === null ||
-    paused ||
-    gameFinished
-  ) {
-    return;
-  }
-
-  const row =
-    Math.floor(selectedCell / 9);
-
-  const col =
-    selectedCell % 9;
-
-  if (
-    originalBoard[row][col] !== 0
-  ) {
-    return;
-  }
-
-  /* NOTES */
-
+  // Notes mode
   if (notesMode) {
 
-    if (
-      notes[selectedCell].has(num)
-    ) {
-
-      notes[selectedCell].delete(num);
-
-    } else {
-
-      notes[selectedCell].add(num);
-    }
-
-    renderBoard();
-
-    return;
-  }
-
-  /* SAME NUMBER */
-
-  if (
-    board[row][col] === num
-  ) {
-    return;
-  }
-
-  history.push({
-    index: selectedCell,
-    previous: board[row][col],
-    score: score,
-    errors: errors
-  });
-
-  /* WRONG */
-
-  if (
-    solution[row][col] !== num
-  ) {
-
-    errors++;
-
-    score =
-      Math.max(
-        0,
-        score - 10
-      );
-
-    flashCell(
-      selectedCell,
-      "error"
-    );
-
-    updateStats();
-
-    if (errors >= 3) {
-
-      errors = 3;
-
-      setTimeout(() => {
-
-        alert(
-          "❌ سه خطا کردی! بازی دوباره شروع می‌شود."
-        );
-
-        newGame();
-
-      }, 400);
-
+    if (board[row][col] !== 0) {
       return;
     }
 
+    const currentNotes = notes[row][col];
+
+    if (currentNotes.has(num)) {
+      currentNotes.delete(num);
+    } else {
+      currentNotes.add(num);
+    }
+
+    playClickSound();
+
+    renderBoard();
     saveGame();
 
     return;
   }
 
-  /* CORRECT */
-
-  board[row][col] = num;
-
-  score += 100;
-
-  notes[selectedCell].clear();
-
-  removeNumberFromNotes(
-    num,
+  history.push({
     row,
-    col
-  );
+    col,
+    value: board[row][col]
+  });
 
-  flashCell(
-    selectedCell,
-    "correct"
-  );
+  // Correct
+  if (num === solution[row][col]) {
 
-  renderBoard();
+    board[row][col] = num;
+
+    score += 100;
+
+    removeRelatedNotes(row, col, num);
+
+    playCorrectSound();
+
+  } else {
+
+    board[row][col] = num;
+
+    errors++;
+
+    score = Math.max(0, score - 25);
+
+    playWrongSound();
+
+    setTimeout(() => {
+
+      if (
+        board[row][col] === num &&
+        solution[row][col] !== num
+      ) {
+        board[row][col] = 0;
+        renderBoard();
+      }
+
+    }, 350);
+  }
 
   updateStats();
+  renderBoard();
   saveGame();
 
-  checkWin();
+  if (errors >= MAX_ERRORS) {
+    gameOver();
+    return;
+  }
+
+  if (checkWin()) {
+    winGame();
+  }
 }
 
-/* =========================
-   REMOVE NUMBER FROM NOTES
-========================= */
+// ===============================
+// REMOVE NOTES
+// ===============================
 
-function removeNumberFromNotes(
-  num,
-  row,
-  col
-) {
+function removeRelatedNotes(row, col, num) {
 
-  for (let i = 0; i < 81; i++) {
+  for (let i = 0; i < 9; i++) {
+    notes[row][i].delete(num);
+    notes[i][col].delete(num);
+  }
 
-    const r =
-      Math.floor(i / 9);
+  const startRow = Math.floor(row / 3) * 3;
+  const startCol = Math.floor(col / 3) * 3;
 
-    const c =
-      i % 9;
-
-    const sameBox =
-      Math.floor(r / 3) === Math.floor(row / 3) &&
-      Math.floor(c / 3) === Math.floor(col / 3);
-
-    if (
-      r === row ||
-      c === col ||
-      sameBox
-    ) {
-
-      notes[i].delete(num);
+  for (let r = startRow; r < startRow + 3; r++) {
+    for (let c = startCol; c < startCol + 3; c++) {
+      notes[r][c].delete(num);
     }
   }
 }
 
-/* =========================
-   ERASE
-========================= */
+// ===============================
+// ERASE
+// ===============================
 
 function eraseCell() {
 
+  if (paused) return;
+
   if (
-    selectedCell === null ||
-    paused ||
-    gameFinished
+    selectedRow === -1 ||
+    selectedCol === -1
   ) {
     return;
   }
 
-  const row =
-    Math.floor(selectedCell / 9);
+  const row = selectedRow;
+  const col = selectedCol;
 
-  const col =
-    selectedCell % 9;
-
-  if (
-    originalBoard[row][col] !== 0
-  ) {
+  if (puzzle[row][col] !== 0) {
     return;
   }
 
-  if (
-    board[row][col] === 0
-  ) {
-    return;
+  if (board[row][col] !== 0) {
+
+    history.push({
+      row,
+      col,
+      value: board[row][col]
+    });
+
+    board[row][col] = 0;
+
+    playClickSound();
   }
 
-  history.push({
-    index: selectedCell,
-    previous: board[row][col],
-    score: score,
-    errors: errors
-  });
-
-  board[row][col] = 0;
+  notes[row][col].clear();
 
   renderBoard();
-  updateStats();
   saveGame();
+  updateStats();
 }
 
-/* =========================
-   UNDO
-========================= */
+// ===============================
+// UNDO
+// ===============================
 
 function undoMove() {
 
-  if (
-    history.length === 0 ||
-    paused ||
-    gameFinished
-  ) {
+  if (paused) return;
+
+  if (history.length === 0) {
+    playWrongSound();
     return;
   }
 
-  const move =
-    history.pop();
+  const last = history.pop();
 
-  const row =
-    Math.floor(move.index / 9);
+  board[last.row][last.col] =
+    last.value;
 
-  const col =
-    move.index % 9;
-
-  board[row][col] =
-    move.previous;
-
-  score =
-    move.score;
-
-  errors =
-    move.errors;
-
-  selectedCell =
-    move.index;
+  playClickSound();
 
   renderBoard();
-  updateStats();
   saveGame();
-}
-
-/* =========================
-   HINT
-========================= */
-
-function useHint() {
-
-  if (
-    paused ||
-    gameFinished
-  ) {
-    return;
-  }
-
-  const emptyCells = [];
-
-  for (let i = 0; i < 81; i++) {
-
-    const row =
-      Math.floor(i / 9);
-
-    const col =
-      i % 9;
-
-    if (
-      originalBoard[row][col] === 0 &&
-      board[row][col] === 0
-    ) {
-
-      emptyCells.push(i);
-    }
-  }
-
-  if (
-    emptyCells.length === 0
-  ) {
-    return;
-  }
-
-  const index =
-    emptyCells[
-      Math.floor(
-        Math.random() *
-        emptyCells.length
-      )
-    ];
-
-  const row =
-    Math.floor(index / 9);
-
-  const col =
-    index % 9;
-
-  selectedCell = index;
-
-  history.push({
-    index: index,
-    previous: 0,
-    score: score,
-    errors: errors
-  });
-
-  board[row][col] =
-    solution[row][col];
-
-  score =
-    Math.max(
-      0,
-      score - 25
-    );
-
-  notes[index].clear();
-
-  removeNumberFromNotes(
-    solution[row][col],
-    row,
-    col
-  );
-
-  renderBoard();
   updateStats();
-  saveGame();
-
-  flashCell(
-    index,
-    "correct"
-  );
-
-  checkWin();
 }
 
-/* =========================
-   NOTES MODE
-========================= */
+// ===============================
+// HINT
+// ===============================
 
-function toggleNotes() {
+function hint() {
 
-  notesMode =
-    !notesMode;
+  if (paused) return;
 
-  document
-    .getElementById("notesBtn")
-    .classList.toggle(
-      "active",
-      notesMode
-    );
-}
-
-/* =========================
-   TIMER
-========================= */
-
-function startTimer() {
-
-  clearInterval(timer);
-
-  timer =
-    setInterval(() => {
-
-      if (
-        paused ||
-        gameFinished
-      ) {
-        return;
-      }
-
-      time++;
-
-      updateTimer();
-
-      if (time % 5 === 0) {
-        saveGame();
-      }
-
-    }, 1000);
-}
-
-function updateTimer() {
-
-  timerEl.textContent =
-    formatTime(time);
-}
-
-/* =========================
-   UPDATE STATS
-========================= */
-
-function updateStats() {
-
-  scoreEl.textContent =
-    score;
-
-  errorsEl.textContent =
-    `${errors} / 3`;
-
-  updateTimer();
-  updateProgress();
-  loadBestTime();
-}
-
-/* =========================
-   PROGRESS
-========================= */
-
-function updateProgress() {
-
-  let filled = 0;
+  let emptyCells = [];
 
   for (let r = 0; r < 9; r++) {
-
     for (let c = 0; c < 9; c++) {
 
       if (
-        board[r][c] !== 0
+        puzzle[r][c] === 0 &&
+        board[r][c] !== solution[r][c]
       ) {
-        filled++;
+        emptyCells.push([r, c]);
       }
     }
   }
 
-  const percent =
-    Math.round(
-      (filled / 81) * 100
-    );
+  if (emptyCells.length === 0) {
+    return;
+  }
 
-  progressBar.style.width =
-    percent + "%";
+  const [row, col] =
+    emptyCells[
+      Math.floor(Math.random() * emptyCells.length)
+    ];
 
-  progressText.textContent =
-    percent + "%";
+  history.push({
+    row,
+    col,
+    value: board[row][col]
+  });
+
+  board[row][col] = solution[row][col];
+
+  score = Math.max(0, score - 50);
+
+  selectedRow = row;
+  selectedCol = col;
+
+  removeRelatedNotes(
+    row,
+    col,
+    solution[row][col]
+  );
+
+  playHintSound();
+
+  updateStats();
+  renderBoard();
+  saveGame();
+
+  if (checkWin()) {
+    winGame();
+  }
 }
 
-/* =========================
-   CHECK WIN
-========================= */
+// ===============================
+// CHECK WIN
+// ===============================
 
 function checkWin() {
 
@@ -922,103 +727,114 @@ function checkWin() {
 
     for (let c = 0; c < 9; c++) {
 
-      if (
-        board[r][c] !==
-        solution[r][c]
-      ) {
-        return;
+      if (board[r][c] !== solution[r][c]) {
+        return false;
       }
     }
   }
 
-  gameFinished = true;
+  return true;
+}
 
-  clearInterval(timer);
+// ===============================
+// GAME OVER
+// ===============================
 
-  score +=
-    Math.max(
-      100,
-      1000 - time * 2
-    );
+function gameOver() {
 
-  updateStats();
+  stopTimer();
 
-  const best =
-    localStorage.getItem(
-      `sudokuBest_${currentLevel}`
-    );
+  paused = true;
 
-  if (
-    !best ||
-    time < Number(best)
-  ) {
-
-    localStorage.setItem(
-      `sudokuBest_${currentLevel}`,
-      time
-    );
-  }
-
-  loadBestTime();
-
-  document.getElementById(
-    "finalScore"
-  ).textContent = score;
-
-  document.getElementById(
-    "finalTime"
-  ).textContent =
-    formatTime(time);
+  playWrongSound();
 
   setTimeout(() => {
 
-    document
-      .getElementById("winModal")
-      .classList.remove(
-        "hidden"
-      );
-
-  }, 500);
-}
-
-/* =========================
-   BEST TIME
-========================= */
-
-function loadBestTime() {
-
-  const best =
-    localStorage.getItem(
-      `sudokuBest_${currentLevel}`
+    alert(
+      "بازی تمام شد!\nتعداد خطاها به ۳ رسید."
     );
 
-  if (!best) {
+    newGame();
 
-    bestTimeEl.textContent =
-      "--:--";
+  }, 400);
+}
 
-    return;
+// ===============================
+// WIN
+// ===============================
+
+function winGame() {
+
+  stopTimer();
+
+  score += Math.max(
+    0,
+    1000 - seconds * 3
+  );
+
+  updateStats();
+
+  saveBestTime();
+
+  playWinSound();
+
+  const modal =
+    document.getElementById("win-modal");
+
+  if (modal) {
+    modal.classList.add("show");
+  } else {
+    setTimeout(() => {
+      alert(
+        `تبریک! 🎉\nامتیاز: ${score}\nزمان: ${formatTime(seconds)}`
+      );
+    }, 500);
   }
 
-  bestTimeEl.textContent =
-    formatTime(
-      Number(best)
-    );
+  saveGame();
 }
 
-/* =========================
-   FORMAT TIME
-========================= */
+// ===============================
+// TIMER
+// ===============================
 
-function formatTime(seconds) {
+function startTimer() {
+
+  stopTimer();
+
+  timerInterval = setInterval(() => {
+
+    if (!paused) {
+
+      seconds++;
+
+      updateTimer();
+
+      if (seconds % 5 === 0) {
+        saveGame();
+      }
+    }
+
+  }, 1000);
+}
+
+function stopTimer() {
+
+  if (timerInterval) {
+
+    clearInterval(timerInterval);
+
+    timerInterval = null;
+  }
+}
+
+function formatTime(totalSeconds) {
 
   const minutes =
-    Math.floor(
-      seconds / 60
-    );
+    Math.floor(totalSeconds / 60);
 
   const secs =
-    seconds % 60;
+    totalSeconds % 60;
 
   return (
     String(minutes).padStart(2, "0") +
@@ -1027,214 +843,220 @@ function formatTime(seconds) {
   );
 }
 
-/* =========================
-   PAUSE
-========================= */
+function updateTimer() {
 
-function pauseGame() {
+  if (timerEl) {
+    timerEl.textContent =
+      formatTime(seconds);
+  }
+}
 
-  if (gameFinished) {
+// ===============================
+// STATS
+// ===============================
+
+function updateStats() {
+
+  if (scoreEl) {
+    scoreEl.textContent = score;
+  }
+
+  if (errorsEl) {
+    errorsEl.textContent =
+      `${errors}/${MAX_ERRORS}`;
+  }
+
+  updateTimer();
+  updateProgress();
+}
+
+function updateProgress() {
+
+  let completed = 0;
+
+  for (let r = 0; r < 9; r++) {
+
+    for (let c = 0; c < 9; c++) {
+
+      if (
+        board[r][c] === solution[r][c]
+      ) {
+        completed++;
+      }
+    }
+  }
+
+  const percentage =
+    Math.round((completed / 81) * 100);
+
+  if (progressEl) {
+    progressEl.style.width =
+      `${percentage}%`;
+  }
+
+  if (progressTextEl) {
+    progressTextEl.textContent =
+      `${percentage}%`;
+  }
+}
+
+// ===============================
+// BEST TIME
+// ===============================
+
+function getBestKey() {
+  return `sudokuBestTime_${difficulty}`;
+}
+
+function updateBestTime() {
+
+  if (!bestTimeEl) return;
+
+  const best =
+    localStorage.getItem(getBestKey());
+
+  bestTimeEl.textContent =
+    best ? formatTime(Number(best)) : "--:--";
+}
+
+function saveBestTime() {
+
+  const key = getBestKey();
+
+  const old =
+    localStorage.getItem(key);
+
+  if (!old || seconds < Number(old)) {
+    localStorage.setItem(
+      key,
+      seconds
+    );
+  }
+
+  updateBestTime();
+}
+
+// ===============================
+// DIFFICULTY
+// ===============================
+
+function setDifficulty(level) {
+
+  if (!difficultySettings[level]) {
     return;
   }
 
-  paused =
-    !paused;
+  difficulty = level;
 
   document
-    .getElementById(
-      "pauseOverlay"
-    )
-    .classList.toggle(
-      "hidden",
-      !paused
-    );
-}
+    .querySelectorAll(".difficulty-btn")
+    .forEach(btn => {
 
-/* =========================
-   SETTINGS
-========================= */
-
-function toggleSettings() {
-
-  document
-    .getElementById(
-      "settings"
-    )
-    .classList.toggle(
-      "hidden"
-    );
-}
-
-function applySettings() {
-
-  const bg =
-    document.getElementById(
-      "bgColor"
-    ).value;
-
-  const cell =
-    document.getElementById(
-      "cellColor"
-    ).value;
-
-  const text =
-    document.getElementById(
-      "textColor"
-    ).value;
-
-  document.documentElement.style
-    .setProperty(
-      "--bg",
-      bg
-    );
-
-  document.documentElement.style
-    .setProperty(
-      "--cell",
-      cell
-    );
-
-  document.documentElement.style
-    .setProperty(
-      "--text",
-      text
-    );
-
-  localStorage.setItem(
-    "sudokuSettings",
-    JSON.stringify({
-      bg,
-      cell,
-      text
-    })
-  );
-
-  toggleSettings();
-}
-
-function resetSettings() {
-
-  const defaults = {
-    bg: "#07152f",
-    cell: "#102650",
-    text: "#ffffff"
-  };
-
-  document.documentElement.style
-    .setProperty(
-      "--bg",
-      defaults.bg
-    );
-
-  document.documentElement.style
-    .setProperty(
-      "--cell",
-      defaults.cell
-    );
-
-  document.documentElement.style
-    .setProperty(
-      "--text",
-      defaults.text
-    );
-
-  document.getElementById(
-    "bgColor"
-  ).value = defaults.bg;
-
-  document.getElementById(
-    "cellColor"
-  ).value = defaults.cell;
-
-  document.getElementById(
-    "textColor"
-  ).value = defaults.text;
-
-  localStorage.setItem(
-    "sudokuSettings",
-    JSON.stringify(
-      defaults
-    )
-  );
-}
-
-function loadSettings() {
-
-  const saved =
-    localStorage.getItem(
-      "sudokuSettings"
-    );
-
-  if (!saved) {
-    return;
-  }
-
-  try {
-
-    const settings =
-      JSON.parse(saved);
-
-    document.documentElement.style
-      .setProperty(
-        "--bg",
-        settings.bg
+      btn.classList.toggle(
+        "active",
+        btn.dataset.difficulty === level
       );
 
-    document.documentElement.style
-      .setProperty(
-        "--cell",
-        settings.cell
-      );
+    });
 
-    document.documentElement.style
-      .setProperty(
-        "--text",
-        settings.text
-      );
+  newGame();
+}
 
-    document.getElementById(
-      "bgColor"
-    ).value = settings.bg;
+// ===============================
+// PAUSE
+// ===============================
 
-    document.getElementById(
-      "cellColor"
-    ).value = settings.cell;
+function togglePause() {
 
-    document.getElementById(
-      "textColor"
-    ).value = settings.text;
+  paused = !paused;
 
-  } catch (error) {
+  playPauseSound();
 
-    console.log(
-      "Settings error:",
-      error
+  const overlay =
+    document.getElementById("pause-overlay");
+
+  if (overlay) {
+    overlay.classList.toggle(
+      "show",
+      paused
     );
   }
 }
 
-/* =========================
-   SAVE GAME
-========================= */
+// ===============================
+// NOTES
+// ===============================
+
+function toggleNotes() {
+
+  notesMode = !notesMode;
+
+  playClickSound();
+
+  const btn =
+    document.getElementById("notes-btn");
+
+  if (btn) {
+    btn.classList.toggle(
+      "active",
+      notesMode
+    );
+  }
+}
+
+// ===============================
+// SOUND SETTINGS
+// ===============================
+
+function toggleSound() {
+
+  soundEnabled = !soundEnabled;
+
+  if (soundEnabled) {
+    initAudio();
+    playClickSound();
+  } else {
+    stopMusic();
+  }
+
+  localStorage.setItem(
+    "sudokuSound",
+    soundEnabled ? "1" : "0"
+  );
+}
+
+function toggleMusic() {
+
+  musicEnabled = !musicEnabled;
+
+  localStorage.setItem(
+    "sudokuMusic",
+    musicEnabled ? "1" : "0"
+  );
+
+  if (musicEnabled) {
+    initAudio();
+    startMusic();
+  } else {
+    stopMusic();
+  }
+}
+
+// ===============================
+// SAVE GAME
+// ===============================
 
 function saveGame() {
 
-  if (gameFinished) {
-    return;
-  }
-
   const data = {
-    board: board,
-    solution: solution,
-    originalBoard: originalBoard,
-    score: score,
-    errors: errors,
-    time: time,
-    currentLevel: currentLevel,
-    selectedCell: selectedCell,
-    notes: notes.map(
-      set => [...set]
-    )
+    solution,
+    puzzle,
+    board,
+    difficulty,
+    errors,
+    score,
+    seconds,
+    paused: false
   };
 
   localStorage.setItem(
@@ -1243,208 +1065,258 @@ function saveGame() {
   );
 }
 
-/* =========================
-   LOAD GAME
-========================= */
+// ===============================
+// LOAD GAME
+// ===============================
 
 function loadGame() {
 
-  const saved =
-    localStorage.getItem(
-      "sudokuCurrentGame"
-    );
-
-  if (!saved) {
-    return false;
-  }
-
   try {
+
+    const saved =
+      localStorage.getItem(
+        "sudokuCurrentGame"
+      );
+
+    if (!saved) {
+      newGame();
+      return;
+    }
 
     const data =
       JSON.parse(saved);
 
     if (
-      !data.board ||
       !data.solution ||
-      !data.originalBoard
+      !data.puzzle ||
+      !data.board
     ) {
-      return false;
+      newGame();
+      return;
     }
 
-    board =
-      data.board;
+    solution = data.solution;
+    puzzle = data.puzzle;
+    board = data.board;
 
-    solution =
-      data.solution;
-
-    originalBoard =
-      data.originalBoard;
-
-    score =
-      data.score || 0;
+    difficulty =
+      data.difficulty || "easy";
 
     errors =
       data.errors || 0;
 
-    time =
-      data.time || 0;
+    score =
+      data.score || 0;
 
-    currentLevel =
-      data.currentLevel || "easy";
+    seconds =
+      data.seconds || 0;
 
-    selectedCell =
-      data.selectedCell ?? null;
+    notes = Array.from({ length: 9 }, () =>
+      Array.from({ length: 9 }, () => new Set())
+    );
 
-    notes =
-      data.notes
-        ? data.notes.map(
-            arr => new Set(arr)
-          )
-        : Array.from(
-            { length: 81 },
-            () => new Set()
-          );
-
-    document
-      .querySelectorAll(
-        ".difficulty-btn"
-      )
-      .forEach(btn => {
-
-        btn.classList.toggle(
-          "active",
-          btn.dataset.level ===
-          currentLevel
-        );
-
-      });
-
-    renderBoard();
+    updateDifficultyButtons();
     updateStats();
+    renderBoard();
     startTimer();
-
-    return true;
+    updateBestTime();
 
   } catch (error) {
 
-    console.log(
-      "Load error:",
-      error
-    );
+    console.error(error);
 
-    return false;
+    newGame();
   }
 }
 
-/* =========================
-   CLOSE WIN
-========================= */
+// ===============================
+// DIFFICULTY BUTTON UI
+// ===============================
 
-function closeWinModal() {
+function updateDifficultyButtons() {
 
   document
-    .getElementById(
-      "winModal"
-    )
-    .classList.add(
-      "hidden"
-    );
-}
+    .querySelectorAll(".difficulty-btn")
+    .forEach(btn => {
 
-/* =========================
-   CELL EFFECT
-========================= */
-
-function flashCell(
-  index,
-  className
-) {
-
-  const cell =
-    document.querySelector(
-      `.cell[data-index="${index}"]`
-    );
-
-  if (!cell) {
-    return;
-  }
-
-  cell.classList.add(
-    className
-  );
-
-  setTimeout(() => {
-
-    cell.classList.remove(
-      className
-    );
-
-  }, 600);
-}
-
-/* =========================
-   SHUFFLE
-========================= */
-
-function shuffle(array) {
-
-  const arr =
-    [...array];
-
-  for (
-    let i = arr.length - 1;
-    i > 0;
-    i--
-  ) {
-
-    const j =
-      Math.floor(
-        Math.random() *
-        (i + 1)
+      btn.classList.toggle(
+        "active",
+        btn.dataset.difficulty === difficulty
       );
 
-    [
-      arr[i],
-      arr[j]
-    ] = [
-      arr[j],
-      arr[i]
-    ];
-  }
-
-  return arr;
+    });
 }
 
-/* =========================
-   KEYBOARD
-========================= */
+// ===============================
+// SETTINGS
+// ===============================
+
+function openSettings() {
+
+  const modal =
+    document.getElementById("settings-modal");
+
+  if (modal) {
+    modal.classList.add("show");
+  }
+
+  playClickSound();
+}
+
+function closeSettings() {
+
+  const modal =
+    document.getElementById("settings-modal");
+
+  if (modal) {
+    modal.classList.remove("show");
+  }
+}
+
+function saveSettings() {
+
+  const bg =
+    document.getElementById("bg-color");
+
+  const cell =
+    document.getElementById("cell-color");
+
+  const text =
+    document.getElementById("text-color");
+
+  if (bg) {
+    document.documentElement.style.setProperty(
+      "--bg",
+      bg.value
+    );
+
+    localStorage.setItem(
+      "sudokuBg",
+      bg.value
+    );
+  }
+
+  if (cell) {
+    document.documentElement.style.setProperty(
+      "--cell",
+      cell.value
+    );
+
+    localStorage.setItem(
+      "sudokuCell",
+      cell.value
+    );
+  }
+
+  if (text) {
+    document.documentElement.style.setProperty(
+      "--text",
+      text.value
+    );
+
+    localStorage.setItem(
+      "sudokuText",
+      text.value
+    );
+  }
+
+  playClickSound();
+
+  closeSettings();
+}
+
+function loadSettings() {
+
+  const bg =
+    localStorage.getItem("sudokuBg");
+
+  const cell =
+    localStorage.getItem("sudokuCell");
+
+  const text =
+    localStorage.getItem("sudokuText");
+
+  if (bg) {
+    document.documentElement.style.setProperty(
+      "--bg",
+      bg
+    );
+
+    const input =
+      document.getElementById("bg-color");
+
+    if (input) input.value = bg;
+  }
+
+  if (cell) {
+    document.documentElement.style.setProperty(
+      "--cell",
+      cell
+    );
+
+    const input =
+      document.getElementById("cell-color");
+
+    if (input) input.value = cell;
+  }
+
+  if (text) {
+    document.documentElement.style.setProperty(
+      "--text",
+      text
+    );
+
+    const input =
+      document.getElementById("text-color");
+
+    if (input) input.value = text;
+  }
+
+  const storedSound =
+    localStorage.getItem("sudokuSound");
+
+  if (storedSound !== null) {
+    soundEnabled =
+      storedSound === "1";
+  }
+
+  const storedMusic =
+    localStorage.getItem("sudokuMusic");
+
+  if (storedMusic !== null) {
+    musicEnabled =
+      storedMusic === "1";
+  }
+}
+
+// ===============================
+// KEYBOARD
+// ===============================
 
 document.addEventListener(
   "keydown",
   event => {
 
-    if (
-      paused ||
-      gameFinished
-    ) {
-      return;
-    }
+    if (paused) return;
+
+    const key = event.key;
 
     if (
-      event.key >= "1" &&
-      event.key <= "9"
+      key >= "1" &&
+      key <= "9"
     ) {
 
-      selectNumber(
-        Number(event.key)
+      enterNumber(
+        Number(key)
       );
 
       return;
     }
 
     if (
-      event.key === "Backspace" ||
-      event.key === "Delete"
+      key === "Backspace" ||
+      key === "Delete" ||
+      key === "0"
     ) {
 
       eraseCell();
@@ -1452,25 +1324,280 @@ document.addEventListener(
       return;
     }
 
-    if (
-      event.key.toLowerCase() === "z" &&
-      (event.ctrlKey || event.metaKey)
-    ) {
+    if (key === "ArrowUp") {
 
       event.preventDefault();
 
-      undoMove();
+      selectedRow =
+        Math.max(0, selectedRow - 1);
+
+      renderBoard();
+
+      return;
     }
 
+    if (key === "ArrowDown") {
+
+      event.preventDefault();
+
+      selectedRow =
+        Math.min(8, selectedRow + 1);
+
+      renderBoard();
+
+      return;
+    }
+
+    if (key === "ArrowLeft") {
+
+      event.preventDefault();
+
+      selectedCol =
+        Math.max(0, selectedCol - 1);
+
+      renderBoard();
+
+      return;
+    }
+
+    if (key === "ArrowRight") {
+
+      event.preventDefault();
+
+      selectedCol =
+        Math.min(8, selectedCol + 1);
+
+      renderBoard();
+
+      return;
+    }
+
+    if (key.toLowerCase() === "n") {
+      toggleNotes();
+    }
+
+    if (key.toLowerCase() === "h") {
+      hint();
+    }
+
+    if (key === " ") {
+
+      event.preventDefault();
+
+      togglePause();
+    }
   }
 );
 
-/* =========================
-   INIT
-========================= */
+// ===============================
+// BUTTON EVENTS
+// ===============================
 
-loadSettings();
+function setupButtons() {
 
-if (!loadGame()) {
-  startGame("easy");
+  // New Game
+  const newGameBtn =
+    document.getElementById("new-game");
+
+  if (newGameBtn) {
+    newGameBtn.addEventListener(
+      "click",
+      newGame
+    );
+  }
+
+  // Undo
+  const undoBtn =
+    document.getElementById("undo-btn");
+
+  if (undoBtn) {
+    undoBtn.addEventListener(
+      "click",
+      undoMove
+    );
+  }
+
+  // Hint
+  const hintBtn =
+    document.getElementById("hint-btn");
+
+  if (hintBtn) {
+    hintBtn.addEventListener(
+      "click",
+      hint
+    );
+  }
+
+  // Notes
+  const notesBtn =
+    document.getElementById("notes-btn");
+
+  if (notesBtn) {
+    notesBtn.addEventListener(
+      "click",
+      toggleNotes
+    );
+  }
+
+  // Pause
+  const pauseBtn =
+    document.getElementById("pause-btn");
+
+  if (pauseBtn) {
+    pauseBtn.addEventListener(
+      "click",
+      togglePause
+    );
+  }
+
+  // Settings
+  const settingsBtn =
+    document.getElementById("settings-btn");
+
+  if (settingsBtn) {
+    settingsBtn.addEventListener(
+      "click",
+      openSettings
+    );
+  }
+
+  // Close Settings
+  const closeSettingsBtn =
+    document.getElementById(
+      "close-settings"
+    );
+
+  if (closeSettingsBtn) {
+    closeSettingsBtn.addEventListener(
+      "click",
+      closeSettings
+    );
+  }
+
+  // Save Settings
+  const saveSettingsBtn =
+    document.getElementById(
+      "save-settings"
+    );
+
+  if (saveSettingsBtn) {
+    saveSettingsBtn.addEventListener(
+      "click",
+      saveSettings
+    );
+  }
+
+  // Number Pad
+  document
+    .querySelectorAll("[data-number]")
+    .forEach(btn => {
+
+      btn.addEventListener(
+        "click",
+        () => {
+
+          initAudio();
+
+          enterNumber(
+            Number(
+              btn.dataset.number
+            )
+          );
+        }
+      );
+    });
+
+  // Erase
+  const eraseBtn =
+    document.getElementById("erase-btn");
+
+  if (eraseBtn) {
+    eraseBtn.addEventListener(
+      "click",
+      eraseCell
+    );
+  }
+
+  // Difficulty
+  document
+    .querySelectorAll(".difficulty-btn")
+    .forEach(btn => {
+
+      btn.addEventListener(
+        "click",
+        () => {
+
+          const level =
+            btn.dataset.difficulty;
+
+          setDifficulty(level);
+        }
+      );
+    });
+
+  // Resume
+  const resumeBtn =
+    document.getElementById(
+      "resume-btn"
+    );
+
+  if (resumeBtn) {
+    resumeBtn.addEventListener(
+      "click",
+      togglePause
+    );
+  }
+
+  // Win New Game
+  const winNewGameBtn =
+    document.getElementById(
+      "win-new-game"
+    );
+
+  if (winNewGameBtn) {
+    winNewGameBtn.addEventListener(
+      "click",
+      () => {
+
+        const modal =
+          document.getElementById(
+            "win-modal"
+          );
+
+        if (modal) {
+          modal.classList.remove("show");
+        }
+
+        newGame();
+      }
+    );
+  }
 }
+
+// ===============================
+// FIRST USER INTERACTION
+// ===============================
+
+document.addEventListener(
+  "pointerdown",
+  () => {
+    initAudio();
+  },
+  { once: true }
+);
+
+// ===============================
+// START
+// ===============================
+
+document.addEventListener(
+  "DOMContentLoaded",
+  () => {
+
+    loadSettings();
+
+    setupButtons();
+
+    loadGame();
+  }
+);
