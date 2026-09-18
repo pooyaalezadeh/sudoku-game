@@ -1,20 +1,26 @@
+
 // ===============================
-// SUDOKU ULTIMATE - PRO VERSION
+// SUDOKU ULTIMATE - PRO MOBILE
 // ===============================
 
 const SIZE = 9;
 const BOX = 3;
 const MAX_ERRORS = 3;
 
-// ---------- Game State ----------
+// ===============================
+// GAME STATE
+// ===============================
+
 let solution = [];
 let puzzle = [];
 let board = [];
+
 let notes = Array.from({ length: 9 }, () =>
   Array.from({ length: 9 }, () => new Set())
 );
 
 let history = [];
+
 let selectedRow = -1;
 let selectedCol = -1;
 
@@ -22,16 +28,23 @@ let difficulty = "easy";
 let errors = 0;
 let score = 0;
 let seconds = 0;
+
 let timerInterval = null;
+let musicTimer = null;
+
 let paused = false;
 let notesMode = false;
 let soundEnabled = true;
 let musicEnabled = false;
 
-let audioContext = null;
-let musicTimer = null;
+let gameFinished = false;
 
-// ---------- Difficulty ----------
+let audioContext = null;
+
+// ===============================
+// DIFFICULTY
+// ===============================
+
 const difficultySettings = {
   easy: 38,
   medium: 31,
@@ -39,74 +52,114 @@ const difficultySettings = {
   expert: 21
 };
 
-// ---------- DOM ----------
+// ===============================
+// DOM
+// ===============================
+
 const boardEl = document.getElementById("board");
 const scoreEl = document.getElementById("score");
 const errorsEl = document.getElementById("errors");
 const timerEl = document.getElementById("timer");
-const bestTimeEl = document.getElementById("best-time");
-const progressEl = document.getElementById("progress");
-const progressTextEl = document.getElementById("progress-text");
+
+const bestTimeEl =
+  document.getElementById("bestTime") ||
+  document.getElementById("best-time");
+
+const progressEl =
+  document.getElementById("progressBar") ||
+  document.getElementById("progress");
+
+const progressTextEl =
+  document.getElementById("progressText") ||
+  document.getElementById("progress-text");
 
 // ===============================
-// AUDIO SYSTEM
+// AUDIO
 // ===============================
 
 function initAudio() {
-  if (!audioContext) {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
 
-    if (AudioCtx) {
+  if (!audioContext) {
+
+    const AudioCtx =
+      window.AudioContext ||
+      window.webkitAudioContext;
+
+    if (!AudioCtx) return;
+
+    try {
       audioContext = new AudioCtx();
+    } catch (error) {
+      console.warn("Audio unavailable:", error);
+      return;
     }
   }
 
-  if (audioContext && audioContext.state === "suspended") {
-    audioContext.resume();
+  if (audioContext.state === "suspended") {
+    audioContext.resume().catch(() => {});
   }
 }
 
-function playTone(frequency, duration = 0.08, type = "sine", volume = 0.04) {
+function playTone(
+  frequency,
+  duration = 0.08,
+  type = "sine",
+  volume = 0.04
+) {
+
   if (!soundEnabled) return;
 
   initAudio();
 
   if (!audioContext) return;
 
-  const oscillator = audioContext.createOscillator();
-  const gain = audioContext.createGain();
+  try {
 
-  oscillator.type = type;
-  oscillator.frequency.setValueAtTime(
-    frequency,
-    audioContext.currentTime
-  );
+    const oscillator =
+      audioContext.createOscillator();
 
-  gain.gain.setValueAtTime(volume, audioContext.currentTime);
+    const gain =
+      audioContext.createGain();
 
-  gain.gain.exponentialRampToValueAtTime(
-    0.001,
-    audioContext.currentTime + duration
-  );
+    const now =
+      audioContext.currentTime;
 
-  oscillator.connect(gain);
-  gain.connect(audioContext.destination);
+    oscillator.type = type;
 
-  oscillator.start();
+    oscillator.frequency.setValueAtTime(
+      frequency,
+      now
+    );
 
-  oscillator.stop(audioContext.currentTime + duration);
+    gain.gain.setValueAtTime(
+      volume,
+      now
+    );
+
+    gain.gain.exponentialRampToValueAtTime(
+      0.001,
+      now + duration
+    );
+
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+
+    oscillator.start(now);
+
+    oscillator.stop(now + duration);
+
+  } catch (error) {
+    console.warn("Audio error:", error);
+  }
 }
 
-// ---------- UI Click ----------
 function playClickSound() {
   playTone(520, 0.06, "sine", 0.035);
 }
 
-// ---------- Correct ----------
 function playCorrectSound() {
-  if (!soundEnabled) return;
 
-  initAudio();
+  if (!soundEnabled) return;
 
   playTone(523.25, 0.08, "sine", 0.04);
 
@@ -119,11 +172,9 @@ function playCorrectSound() {
   }, 140);
 }
 
-// ---------- Wrong ----------
 function playWrongSound() {
-  if (!soundEnabled) return;
 
-  initAudio();
+  if (!soundEnabled) return;
 
   playTone(220, 0.12, "sawtooth", 0.035);
 
@@ -132,8 +183,8 @@ function playWrongSound() {
   }, 100);
 }
 
-// ---------- Hint ----------
 function playHintSound() {
+
   if (!soundEnabled) return;
 
   playTone(392, 0.08, "sine", 0.035);
@@ -143,8 +194,8 @@ function playHintSound() {
   }, 90);
 }
 
-// ---------- Win ----------
 function playWinSound() {
+
   if (!soundEnabled) return;
 
   const melody = [
@@ -155,23 +206,34 @@ function playWinSound() {
   ];
 
   melody.forEach(([frequency, delay]) => {
+
     setTimeout(() => {
-      playTone(frequency, 0.18, "sine", 0.055);
+
+      playTone(
+        frequency,
+        0.18,
+        "sine",
+        0.055
+      );
+
     }, delay);
+
   });
 }
 
-// ---------- Pause ----------
 function playPauseSound() {
   playTone(330, 0.08, "sine", 0.03);
 }
 
 // ===============================
-// BACKGROUND MUSIC
+// MUSIC
 // ===============================
 
 function startMusic() {
-  if (!musicEnabled) return;
+
+  if (!musicEnabled || !soundEnabled) {
+    return;
+  }
 
   stopMusic();
 
@@ -189,7 +251,14 @@ function startMusic() {
   let index = 0;
 
   musicTimer = setInterval(() => {
-    if (!paused && musicEnabled && soundEnabled) {
+
+    if (
+      !paused &&
+      !gameFinished &&
+      musicEnabled &&
+      soundEnabled
+    ) {
+
       playTone(
         melody[index],
         0.45,
@@ -203,12 +272,16 @@ function startMusic() {
         index = 0;
       }
     }
+
   }, 520);
 }
 
 function stopMusic() {
+
   if (musicTimer) {
+
     clearInterval(musicTimer);
+
     musicTimer = null;
   }
 }
@@ -218,29 +291,64 @@ function stopMusic() {
 // ===============================
 
 function shuffle(array) {
+
   const arr = [...array];
 
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+  for (
+    let i = arr.length - 1;
+    i > 0;
+    i--
+  ) {
 
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+    const j =
+      Math.floor(Math.random() * (i + 1));
+
+    [
+      arr[i],
+      arr[j]
+    ] = [
+      arr[j],
+      arr[i]
+    ];
   }
 
   return arr;
 }
 
 function isSafe(grid, row, col, num) {
+
   for (let i = 0; i < 9; i++) {
-    if (grid[row][i] === num) return false;
-    if (grid[i][col] === num) return false;
+
+    if (grid[row][i] === num) {
+      return false;
+    }
+
+    if (grid[i][col] === num) {
+      return false;
+    }
   }
 
-  const startRow = Math.floor(row / 3) * 3;
-  const startCol = Math.floor(col / 3) * 3;
+  const startRow =
+    Math.floor(row / 3) * 3;
 
-  for (let r = startRow; r < startRow + 3; r++) {
-    for (let c = startCol; c < startCol + 3; c++) {
-      if (grid[r][c] === num) return false;
+  const startCol =
+    Math.floor(col / 3) * 3;
+
+  for (
+    let r = startRow;
+    r < startRow + 3;
+    r++
+  ) {
+
+    for (
+      let c = startCol;
+      c < startCol + 3;
+      c++
+    ) {
+
+      if (grid[r][c] === num) {
+        return false;
+      }
     }
   }
 
@@ -248,18 +356,28 @@ function isSafe(grid, row, col, num) {
 }
 
 function fillGrid(grid) {
+
   for (let row = 0; row < 9; row++) {
+
     for (let col = 0; col < 9; col++) {
 
       if (grid[row][col] === 0) {
 
-        const numbers = shuffle([
-          1, 2, 3, 4, 5, 6, 7, 8, 9
-        ]);
+        const numbers =
+          shuffle([
+            1,2,3,4,5,6,7,8,9
+          ]);
 
         for (const num of numbers) {
 
-          if (isSafe(grid, row, col, num)) {
+          if (
+            isSafe(
+              grid,
+              row,
+              col,
+              num
+            )
+          ) {
 
             grid[row][col] = num;
 
@@ -280,9 +398,12 @@ function fillGrid(grid) {
 }
 
 function generateSolution() {
-  const grid = Array.from({ length: 9 }, () =>
-    Array(9).fill(0)
-  );
+
+  const grid =
+    Array.from(
+      { length: 9 },
+      () => Array(9).fill(0)
+    );
 
   fillGrid(grid);
 
@@ -295,22 +416,33 @@ function generateSolution() {
 
 function createPuzzle(fullGrid, clues) {
 
-  const result = fullGrid.map(row => [...row]);
+  const result =
+    fullGrid.map(row => [...row]);
 
-  let cellsToRemove = 81 - clues;
+  const cellsToRemove =
+    81 - clues;
 
   const positions = [];
 
   for (let r = 0; r < 9; r++) {
+
     for (let c = 0; c < 9; c++) {
+
       positions.push([r, c]);
     }
   }
 
-  const shuffled = shuffle(positions);
+  const shuffled =
+    shuffle(positions);
 
-  for (let i = 0; i < cellsToRemove; i++) {
-    const [r, c] = shuffled[i];
+  for (
+    let i = 0;
+    i < cellsToRemove;
+    i++
+  ) {
+
+    const [r, c] =
+      shuffled[i];
 
     result[r][c] = 0;
   }
@@ -325,6 +457,11 @@ function createPuzzle(fullGrid, clues) {
 function newGame() {
 
   stopTimer();
+  stopMusic();
+
+  gameFinished = false;
+  paused = false;
+  notesMode = false;
 
   solution = generateSolution();
 
@@ -333,11 +470,18 @@ function newGame() {
     difficultySettings[difficulty]
   );
 
-  board = puzzle.map(row => [...row]);
+  board =
+    puzzle.map(row => [...row]);
 
-  notes = Array.from({ length: 9 }, () =>
-    Array.from({ length: 9 }, () => new Set())
-  );
+  notes =
+    Array.from(
+      { length: 9 },
+      () =>
+        Array.from(
+          { length: 9 },
+          () => new Set()
+        )
+    );
 
   history = [];
 
@@ -347,17 +491,41 @@ function newGame() {
   errors = 0;
   score = 0;
   seconds = 0;
-  paused = false;
-  notesMode = false;
 
+  hidePauseOverlay();
+  hideWinModal();
+
+  updateDifficultyButtons();
+  updateNotesButton();
   updateStats();
-  renderBoard();
-  startTimer();
   updateBestTime();
+
+  renderBoard();
+
+  startTimer();
 
   saveGame();
 
   playClickSound();
+
+  if (musicEnabled) {
+    startMusic();
+  }
+}
+
+// ===============================
+// START GAME
+// ===============================
+
+function startGame(level) {
+
+  if (!difficultySettings[level]) {
+    level = "easy";
+  }
+
+  difficulty = level;
+
+  newGame();
 }
 
 // ===============================
@@ -374,14 +542,16 @@ function renderBoard() {
 
     for (let col = 0; col < 9; col++) {
 
-      const cell = document.createElement("div");
+      const cell =
+        document.createElement("div");
 
       cell.className = "cell";
 
       cell.dataset.row = row;
       cell.dataset.col = col;
 
-      const value = board[row][col];
+      const value =
+        board[row][col];
 
       if (value !== 0) {
 
@@ -389,6 +559,7 @@ function renderBoard() {
 
         if (puzzle[row][col] !== 0) {
           cell.classList.add("fixed");
+          cell.classList.add("prefilled");
         } else {
           cell.classList.add("user-number");
         }
@@ -399,33 +570,45 @@ function renderBoard() {
         row === selectedRow &&
         col === selectedCol
       ) {
+
         cell.classList.add("selected");
       }
 
-      // Same row / column / box
-      if (selectedRow !== -1 && selectedCol !== -1) {
+      // Highlight
+      if (
+        selectedRow !== -1 &&
+        selectedCol !== -1
+      ) {
 
         if (
           row === selectedRow ||
           col === selectedCol ||
           (
-            Math.floor(row / 3) === Math.floor(selectedRow / 3) &&
-            Math.floor(col / 3) === Math.floor(selectedCol / 3)
+            Math.floor(row / 3) ===
+            Math.floor(selectedRow / 3) &&
+            Math.floor(col / 3) ===
+            Math.floor(selectedCol / 3)
           )
         ) {
+
           cell.classList.add("highlight");
         }
 
         if (
           value !== 0 &&
-          value === board[selectedRow][selectedCol]
+          value ===
+          board[selectedRow][selectedCol]
         ) {
+
           cell.classList.add("same-number");
         }
       }
 
       // Notes
-      if (value === 0 && notes[row][col].size > 0) {
+      if (
+        value === 0 &&
+        notes[row][col].size > 0
+      ) {
 
         const notesContainer =
           document.createElement("div");
@@ -437,28 +620,42 @@ function renderBoard() {
           const note =
             document.createElement("span");
 
+          note.className = "note";
+
           note.textContent =
-            notes[row][col].has(n) ? n : "";
+            notes[row][col].has(n)
+              ? n
+              : "";
 
           notesContainer.appendChild(note);
         }
 
-        cell.appendChild(notesContainer);
+        cell.appendChild(
+          notesContainer
+        );
       }
 
-      cell.addEventListener("click", () => {
+      // Touch / click
+      cell.addEventListener(
+        "pointerup",
+        event => {
 
-        if (paused) return;
+          event.preventDefault();
 
-        initAudio();
+          if (paused || gameFinished) {
+            return;
+          }
 
-        selectedRow = row;
-        selectedCol = col;
+          initAudio();
 
-        playClickSound();
+          selectedRow = row;
+          selectedCol = col;
 
-        renderBoard();
-      });
+          playClickSound();
+
+          renderBoard();
+        }
+      );
 
       boardEl.appendChild(cell);
     }
@@ -468,37 +665,56 @@ function renderBoard() {
 }
 
 // ===============================
+// SELECT NUMBER
+// ===============================
+
+function selectNumber(num) {
+
+  initAudio();
+
+  enterNumber(Number(num));
+}
+
+// ===============================
 // ENTER NUMBER
 // ===============================
 
 function enterNumber(num) {
 
-  if (paused) return;
+  if (paused || gameFinished) {
+    return;
+  }
 
   if (
     selectedRow === -1 ||
     selectedCol === -1
   ) {
+
+    playWrongSound();
     return;
   }
 
   const row = selectedRow;
   const col = selectedCol;
 
-  // Fixed cell
-  if (puzzle[row][col] !== 0) {
+  if (
+    puzzle[row][col] !== 0
+  ) {
+
     playWrongSound();
     return;
   }
 
-  // Notes mode
+  // Notes
   if (notesMode) {
 
     if (board[row][col] !== 0) {
+      playWrongSound();
       return;
     }
 
-    const currentNotes = notes[row][col];
+    const currentNotes =
+      notes[row][col];
 
     if (currentNotes.has(num)) {
       currentNotes.delete(num);
@@ -521,13 +737,19 @@ function enterNumber(num) {
   });
 
   // Correct
-  if (num === solution[row][col]) {
+  if (
+    num === solution[row][col]
+  ) {
 
     board[row][col] = num;
 
     score += 100;
 
-    removeRelatedNotes(row, col, num);
+    removeRelatedNotes(
+      row,
+      col,
+      num
+    );
 
     playCorrectSound();
 
@@ -537,18 +759,27 @@ function enterNumber(num) {
 
     errors++;
 
-    score = Math.max(0, score - 25);
+    score =
+      Math.max(
+        0,
+        score - 25
+      );
+
+    const wrongNumber = num;
 
     playWrongSound();
 
     setTimeout(() => {
 
       if (
-        board[row][col] === num &&
-        solution[row][col] !== num
+        board[row][col] === wrongNumber &&
+        solution[row][col] !== wrongNumber
       ) {
+
         board[row][col] = 0;
+
         renderBoard();
+        saveGame();
       }
 
     }, 350);
@@ -559,7 +790,9 @@ function enterNumber(num) {
   saveGame();
 
   if (errors >= MAX_ERRORS) {
+
     gameOver();
+
     return;
   }
 
@@ -569,21 +802,39 @@ function enterNumber(num) {
 }
 
 // ===============================
-// REMOVE NOTES
+// REMOVE RELATED NOTES
 // ===============================
 
-function removeRelatedNotes(row, col, num) {
+function removeRelatedNotes(
+  row,
+  col,
+  num
+) {
 
   for (let i = 0; i < 9; i++) {
+
     notes[row][i].delete(num);
     notes[i][col].delete(num);
   }
 
-  const startRow = Math.floor(row / 3) * 3;
-  const startCol = Math.floor(col / 3) * 3;
+  const startRow =
+    Math.floor(row / 3) * 3;
 
-  for (let r = startRow; r < startRow + 3; r++) {
-    for (let c = startCol; c < startCol + 3; c++) {
+  const startCol =
+    Math.floor(col / 3) * 3;
+
+  for (
+    let r = startRow;
+    r < startRow + 3;
+    r++
+  ) {
+
+    for (
+      let c = startCol;
+      c < startCol + 3;
+      c++
+    ) {
+
       notes[r][c].delete(num);
     }
   }
@@ -595,12 +846,16 @@ function removeRelatedNotes(row, col, num) {
 
 function eraseCell() {
 
-  if (paused) return;
+  if (paused || gameFinished) {
+    return;
+  }
 
   if (
     selectedRow === -1 ||
     selectedCol === -1
   ) {
+
+    playWrongSound();
     return;
   }
 
@@ -608,6 +863,8 @@ function eraseCell() {
   const col = selectedCol;
 
   if (puzzle[row][col] !== 0) {
+
+    playWrongSound();
     return;
   }
 
@@ -637,14 +894,18 @@ function eraseCell() {
 
 function undoMove() {
 
-  if (paused) return;
+  if (paused || gameFinished) {
+    return;
+  }
 
   if (history.length === 0) {
+
     playWrongSound();
     return;
   }
 
-  const last = history.pop();
+  const last =
+    history.pop();
 
   board[last.row][last.col] =
     last.value;
@@ -662,17 +923,21 @@ function undoMove() {
 
 function hint() {
 
-  if (paused) return;
+  if (paused || gameFinished) {
+    return;
+  }
 
-  let emptyCells = [];
+  const emptyCells = [];
 
   for (let r = 0; r < 9; r++) {
+
     for (let c = 0; c < 9; c++) {
 
       if (
         puzzle[r][c] === 0 &&
         board[r][c] !== solution[r][c]
       ) {
+
         emptyCells.push([r, c]);
       }
     }
@@ -684,7 +949,10 @@ function hint() {
 
   const [row, col] =
     emptyCells[
-      Math.floor(Math.random() * emptyCells.length)
+      Math.floor(
+        Math.random() *
+        emptyCells.length
+      )
     ];
 
   history.push({
@@ -693,9 +961,14 @@ function hint() {
     value: board[row][col]
   });
 
-  board[row][col] = solution[row][col];
+  board[row][col] =
+    solution[row][col];
 
-  score = Math.max(0, score - 50);
+  score =
+    Math.max(
+      0,
+      score - 50
+    );
 
   selectedRow = row;
   selectedCol = col;
@@ -717,6 +990,11 @@ function hint() {
   }
 }
 
+// Alias
+function useHint() {
+  hint();
+}
+
 // ===============================
 // CHECK WIN
 // ===============================
@@ -727,7 +1005,11 @@ function checkWin() {
 
     for (let c = 0; c < 9; c++) {
 
-      if (board[r][c] !== solution[r][c]) {
+      if (
+        board[r][c] !==
+        solution[r][c]
+      ) {
+
         return false;
       }
     }
@@ -743,8 +1025,10 @@ function checkWin() {
 function gameOver() {
 
   stopTimer();
+  stopMusic();
 
   paused = true;
+  gameFinished = true;
 
   playWrongSound();
 
@@ -756,7 +1040,7 @@ function gameOver() {
 
     newGame();
 
-  }, 400);
+  }, 450);
 }
 
 // ===============================
@@ -765,12 +1049,20 @@ function gameOver() {
 
 function winGame() {
 
-  stopTimer();
+  if (gameFinished) {
+    return;
+  }
 
-  score += Math.max(
-    0,
-    1000 - seconds * 3
-  );
+  gameFinished = true;
+
+  stopTimer();
+  stopMusic();
+
+  score +=
+    Math.max(
+      0,
+      1000 - seconds * 3
+    );
 
   updateStats();
 
@@ -779,16 +1071,38 @@ function winGame() {
   playWinSound();
 
   const modal =
+    document.getElementById("winModal") ||
     document.getElementById("win-modal");
 
   if (modal) {
+
+    modal.classList.remove("hidden");
     modal.classList.add("show");
+
+    const finalScore =
+      document.getElementById("finalScore");
+
+    const finalTime =
+      document.getElementById("finalTime");
+
+    if (finalScore) {
+      finalScore.textContent = score;
+    }
+
+    if (finalTime) {
+      finalTime.textContent =
+        formatTime(seconds);
+    }
+
   } else {
+
     setTimeout(() => {
+
       alert(
         `تبریک! 🎉\nامتیاز: ${score}\nزمان: ${formatTime(seconds)}`
       );
-    }, 500);
+
+    }, 400);
   }
 
   saveGame();
@@ -802,20 +1116,24 @@ function startTimer() {
 
   stopTimer();
 
-  timerInterval = setInterval(() => {
+  timerInterval =
+    setInterval(() => {
 
-    if (!paused) {
+      if (
+        !paused &&
+        !gameFinished
+      ) {
 
-      seconds++;
+        seconds++;
 
-      updateTimer();
+        updateTimer();
 
-      if (seconds % 5 === 0) {
-        saveGame();
+        if (seconds % 5 === 0) {
+          saveGame();
+        }
       }
-    }
 
-  }, 1000);
+    }, 1000);
 }
 
 function stopTimer() {
@@ -831,7 +1149,9 @@ function stopTimer() {
 function formatTime(totalSeconds) {
 
   const minutes =
-    Math.floor(totalSeconds / 60);
+    Math.floor(
+      totalSeconds / 60
+    );
 
   const secs =
     totalSeconds % 60;
@@ -846,6 +1166,7 @@ function formatTime(totalSeconds) {
 function updateTimer() {
 
   if (timerEl) {
+
     timerEl.textContent =
       formatTime(seconds);
   }
@@ -862,6 +1183,7 @@ function updateStats() {
   }
 
   if (errorsEl) {
+
     errorsEl.textContent =
       `${errors}/${MAX_ERRORS}`;
   }
@@ -872,6 +1194,10 @@ function updateStats() {
 
 function updateProgress() {
 
+  if (!solution.length) {
+    return;
+  }
+
   let completed = 0;
 
   for (let r = 0; r < 9; r++) {
@@ -879,22 +1205,28 @@ function updateProgress() {
     for (let c = 0; c < 9; c++) {
 
       if (
-        board[r][c] === solution[r][c]
+        board[r][c] ===
+        solution[r][c]
       ) {
+
         completed++;
       }
     }
   }
 
   const percentage =
-    Math.round((completed / 81) * 100);
+    Math.round(
+      (completed / 81) * 100
+    );
 
   if (progressEl) {
+
     progressEl.style.width =
       `${percentage}%`;
   }
 
   if (progressTextEl) {
+
     progressTextEl.textContent =
       `${percentage}%`;
   }
@@ -905,28 +1237,40 @@ function updateProgress() {
 // ===============================
 
 function getBestKey() {
+
   return `sudokuBestTime_${difficulty}`;
 }
 
 function updateBestTime() {
 
-  if (!bestTimeEl) return;
+  if (!bestTimeEl) {
+    return;
+  }
 
   const best =
-    localStorage.getItem(getBestKey());
+    localStorage.getItem(
+      getBestKey()
+    );
 
   bestTimeEl.textContent =
-    best ? formatTime(Number(best)) : "--:--";
+    best
+      ? formatTime(Number(best))
+      : "--:--";
 }
 
 function saveBestTime() {
 
-  const key = getBestKey();
+  const key =
+    getBestKey();
 
   const old =
     localStorage.getItem(key);
 
-  if (!old || seconds < Number(old)) {
+  if (
+    !old ||
+    seconds < Number(old)
+  ) {
+
     localStorage.setItem(
       key,
       seconds
@@ -948,18 +1292,26 @@ function setDifficulty(level) {
 
   difficulty = level;
 
+  updateDifficultyButtons();
+
+  newGame();
+}
+
+function updateDifficultyButtons() {
+
   document
     .querySelectorAll(".difficulty-btn")
     .forEach(btn => {
 
+      const level =
+        btn.dataset.level ||
+        btn.dataset.difficulty;
+
       btn.classList.toggle(
         "active",
-        btn.dataset.difficulty === level
+        level === difficulty
       );
-
     });
-
-  newGame();
 }
 
 // ===============================
@@ -968,18 +1320,48 @@ function setDifficulty(level) {
 
 function togglePause() {
 
+  if (gameFinished) {
+    return;
+  }
+
   paused = !paused;
 
   playPauseSound();
 
   const overlay =
+    document.getElementById("pauseOverlay") ||
     document.getElementById("pause-overlay");
 
   if (overlay) {
+
+    overlay.classList.toggle(
+      "hidden",
+      !paused
+    );
+
     overlay.classList.toggle(
       "show",
       paused
     );
+  }
+
+  saveGame();
+}
+
+function pauseGame() {
+  togglePause();
+}
+
+function hidePauseOverlay() {
+
+  const overlay =
+    document.getElementById("pauseOverlay") ||
+    document.getElementById("pause-overlay");
+
+  if (overlay) {
+
+    overlay.classList.add("hidden");
+    overlay.classList.remove("show");
   }
 }
 
@@ -989,14 +1371,25 @@ function togglePause() {
 
 function toggleNotes() {
 
+  if (paused || gameFinished) {
+    return;
+  }
+
   notesMode = !notesMode;
 
   playClickSound();
 
+  updateNotesButton();
+}
+
+function updateNotesButton() {
+
   const btn =
+    document.getElementById("notesBtn") ||
     document.getElementById("notes-btn");
 
   if (btn) {
+
     btn.classList.toggle(
       "active",
       notesMode
@@ -1005,24 +1398,296 @@ function toggleNotes() {
 }
 
 // ===============================
-// SOUND SETTINGS
+// SETTINGS
+// ===============================
+
+function toggleSettings() {
+
+  const settings =
+    document.getElementById("settings");
+
+  if (!settings) {
+    return;
+  }
+
+  const isHidden =
+    settings.classList.contains("hidden");
+
+  if (isHidden) {
+    openSettings();
+  } else {
+    closeSettings();
+  }
+}
+
+function openSettings() {
+
+  const settings =
+    document.getElementById("settings") ||
+    document.getElementById("settings-modal");
+
+  if (!settings) {
+    return;
+  }
+
+  settings.classList.remove("hidden");
+  settings.classList.add("show");
+
+  playClickSound();
+}
+
+function closeSettings() {
+
+  const settings =
+    document.getElementById("settings") ||
+    document.getElementById("settings-modal");
+
+  if (!settings) {
+    return;
+  }
+
+  settings.classList.add("hidden");
+  settings.classList.remove("show");
+}
+
+function applySettings() {
+  saveSettings();
+}
+
+function saveSettings() {
+
+  const bg =
+    document.getElementById("bgColor") ||
+    document.getElementById("bg-color");
+
+  const cell =
+    document.getElementById("cellColor") ||
+    document.getElementById("cell-color");
+
+  const text =
+    document.getElementById("textColor") ||
+    document.getElementById("text-color");
+
+  if (bg) {
+
+    document.documentElement
+      .style
+      .setProperty(
+        "--bg",
+        bg.value
+      );
+
+    localStorage.setItem(
+      "sudokuBg",
+      bg.value
+    );
+  }
+
+  if (cell) {
+
+    document.documentElement
+      .style
+      .setProperty(
+        "--cell",
+        cell.value
+      );
+
+    localStorage.setItem(
+      "sudokuCell",
+      cell.value
+    );
+  }
+
+  if (text) {
+
+    document.documentElement
+      .style
+      .setProperty(
+        "--text",
+        text.value
+      );
+
+    localStorage.setItem(
+      "sudokuText",
+      text.value
+    );
+  }
+
+  playClickSound();
+
+  closeSettings();
+}
+
+function resetSettings() {
+
+  const defaults = {
+    bg: "#07152f",
+    cell: "#102650",
+    text: "#ffffff"
+  };
+
+  document.documentElement
+    .style
+    .setProperty(
+      "--bg",
+      defaults.bg
+    );
+
+  document.documentElement
+    .style
+    .setProperty(
+      "--cell",
+      defaults.cell
+    );
+
+  document.documentElement
+    .style
+    .setProperty(
+      "--text",
+      defaults.text
+    );
+
+  localStorage.setItem(
+    "sudokuBg",
+    defaults.bg
+  );
+
+  localStorage.setItem(
+    "sudokuCell",
+    defaults.cell
+  );
+
+  localStorage.setItem(
+    "sudokuText",
+    defaults.text
+  );
+
+  const bg =
+    document.getElementById("bgColor");
+
+  const cell =
+    document.getElementById("cellColor");
+
+  const text =
+    document.getElementById("textColor");
+
+  if (bg) bg.value = defaults.bg;
+  if (cell) cell.value = defaults.cell;
+  if (text) text.value = defaults.text;
+
+  playClickSound();
+}
+
+function loadSettings() {
+
+  const bg =
+    localStorage.getItem("sudokuBg");
+
+  const cell =
+    localStorage.getItem("sudokuCell");
+
+  const text =
+    localStorage.getItem("sudokuText");
+
+  if (bg) {
+
+    document.documentElement
+      .style
+      .setProperty(
+        "--bg",
+        bg
+      );
+
+    const input =
+      document.getElementById("bgColor") ||
+      document.getElementById("bg-color");
+
+    if (input) {
+      input.value = bg;
+    }
+  }
+
+  if (cell) {
+
+    document.documentElement
+      .style
+      .setProperty(
+        "--cell",
+        cell
+      );
+
+    const input =
+      document.getElementById("cellColor") ||
+      document.getElementById("cell-color");
+
+    if (input) {
+      input.value = cell;
+    }
+  }
+
+  if (text) {
+
+    document.documentElement
+      .style
+      .setProperty(
+        "--text",
+        text
+      );
+
+    const input =
+      document.getElementById("textColor") ||
+      document.getElementById("text-color");
+
+    if (input) {
+      input.value = text;
+    }
+  }
+
+  const storedSound =
+    localStorage.getItem("sudokuSound");
+
+  if (storedSound !== null) {
+
+    soundEnabled =
+      storedSound === "1";
+  }
+
+  const storedMusic =
+    localStorage.getItem("sudokuMusic");
+
+  if (storedMusic !== null) {
+
+    musicEnabled =
+      storedMusic === "1";
+  }
+}
+
+// ===============================
+// SOUND CONTROLS
 // ===============================
 
 function toggleSound() {
 
   soundEnabled = !soundEnabled;
 
-  if (soundEnabled) {
-    initAudio();
-    playClickSound();
-  } else {
-    stopMusic();
-  }
-
   localStorage.setItem(
     "sudokuSound",
     soundEnabled ? "1" : "0"
   );
+
+  if (soundEnabled) {
+
+    initAudio();
+    playClickSound();
+
+    if (musicEnabled) {
+      startMusic();
+    }
+
+  } else {
+
+    stopMusic();
+  }
 }
 
 function toggleMusic() {
@@ -1034,11 +1699,38 @@ function toggleMusic() {
     musicEnabled ? "1" : "0"
   );
 
-  if (musicEnabled) {
+  if (
+    musicEnabled &&
+    soundEnabled
+  ) {
+
     initAudio();
     startMusic();
+
   } else {
+
     stopMusic();
+  }
+}
+
+// ===============================
+// WIN MODAL
+// ===============================
+
+function closeWinModal() {
+  hideWinModal();
+}
+
+function hideWinModal() {
+
+  const modal =
+    document.getElementById("winModal") ||
+    document.getElementById("win-modal");
+
+  if (modal) {
+
+    modal.classList.add("hidden");
+    modal.classList.remove("show");
   }
 }
 
@@ -1048,21 +1740,57 @@ function toggleMusic() {
 
 function saveGame() {
 
+  if (
+    !solution.length ||
+    !puzzle.length ||
+    !board.length
+  ) {
+    return;
+  }
+
   const data = {
+
     solution,
     puzzle,
     board,
+
+    notes:
+      notes.map(row =>
+        row.map(set =>
+          [...set]
+        )
+      ),
+
+    history,
+
     difficulty,
     errors,
     score,
     seconds,
-    paused: false
+
+    selectedRow,
+    selectedCol,
+
+    notesMode,
+
+    paused: false,
+    gameFinished
   };
 
-  localStorage.setItem(
-    "sudokuCurrentGame",
-    JSON.stringify(data)
-  );
+  try {
+
+    localStorage.setItem(
+      "sudokuCurrentGame",
+      JSON.stringify(data)
+    );
+
+  } catch (error) {
+
+    console.warn(
+      "Save game failed:",
+      error
+    );
+  }
 }
 
 // ===============================
@@ -1079,6 +1807,7 @@ function loadGame() {
       );
 
     if (!saved) {
+
       newGame();
       return;
     }
@@ -1091,6 +1820,7 @@ function loadGame() {
       !data.puzzle ||
       !data.board
     ) {
+
       newGame();
       return;
     }
@@ -1103,189 +1833,94 @@ function loadGame() {
       data.difficulty || "easy";
 
     errors =
-      data.errors || 0;
+      Number(data.errors) || 0;
 
     score =
-      data.score || 0;
+      Number(data.score) || 0;
 
     seconds =
-      data.seconds || 0;
+      Number(data.seconds) || 0;
 
-    notes = Array.from({ length: 9 }, () =>
-      Array.from({ length: 9 }, () => new Set())
-    );
+    selectedRow =
+      Number.isInteger(data.selectedRow)
+        ? data.selectedRow
+        : -1;
+
+    selectedCol =
+      Number.isInteger(data.selectedCol)
+        ? data.selectedCol
+        : -1;
+
+    notesMode =
+      Boolean(data.notesMode);
+
+    paused = false;
+
+    gameFinished =
+      Boolean(data.gameFinished);
+
+    // Notes
+    if (
+      Array.isArray(data.notes) &&
+      data.notes.length === 9
+    ) {
+
+      notes =
+        data.notes.map(row =>
+          row.map(values =>
+            new Set(
+              Array.isArray(values)
+                ? values
+                : []
+            )
+          )
+        );
+
+    } else {
+
+      notes =
+        Array.from(
+          { length: 9 },
+          () =>
+            Array.from(
+              { length: 9 },
+              () => new Set()
+            )
+        );
+    }
+
+    history =
+      Array.isArray(data.history)
+        ? data.history
+        : [];
 
     updateDifficultyButtons();
+    updateNotesButton();
     updateStats();
     renderBoard();
-    startTimer();
     updateBestTime();
+
+    if (gameFinished) {
+
+      winGame();
+
+    } else {
+
+      startTimer();
+
+      if (musicEnabled) {
+        startMusic();
+      }
+    }
 
   } catch (error) {
 
-    console.error(error);
+    console.error(
+      "Load game failed:",
+      error
+    );
 
     newGame();
-  }
-}
-
-// ===============================
-// DIFFICULTY BUTTON UI
-// ===============================
-
-function updateDifficultyButtons() {
-
-  document
-    .querySelectorAll(".difficulty-btn")
-    .forEach(btn => {
-
-      btn.classList.toggle(
-        "active",
-        btn.dataset.difficulty === difficulty
-      );
-
-    });
-}
-
-// ===============================
-// SETTINGS
-// ===============================
-
-function openSettings() {
-
-  const modal =
-    document.getElementById("settings-modal");
-
-  if (modal) {
-    modal.classList.add("show");
-  }
-
-  playClickSound();
-}
-
-function closeSettings() {
-
-  const modal =
-    document.getElementById("settings-modal");
-
-  if (modal) {
-    modal.classList.remove("show");
-  }
-}
-
-function saveSettings() {
-
-  const bg =
-    document.getElementById("bg-color");
-
-  const cell =
-    document.getElementById("cell-color");
-
-  const text =
-    document.getElementById("text-color");
-
-  if (bg) {
-    document.documentElement.style.setProperty(
-      "--bg",
-      bg.value
-    );
-
-    localStorage.setItem(
-      "sudokuBg",
-      bg.value
-    );
-  }
-
-  if (cell) {
-    document.documentElement.style.setProperty(
-      "--cell",
-      cell.value
-    );
-
-    localStorage.setItem(
-      "sudokuCell",
-      cell.value
-    );
-  }
-
-  if (text) {
-    document.documentElement.style.setProperty(
-      "--text",
-      text.value
-    );
-
-    localStorage.setItem(
-      "sudokuText",
-      text.value
-    );
-  }
-
-  playClickSound();
-
-  closeSettings();
-}
-
-function loadSettings() {
-
-  const bg =
-    localStorage.getItem("sudokuBg");
-
-  const cell =
-    localStorage.getItem("sudokuCell");
-
-  const text =
-    localStorage.getItem("sudokuText");
-
-  if (bg) {
-    document.documentElement.style.setProperty(
-      "--bg",
-      bg
-    );
-
-    const input =
-      document.getElementById("bg-color");
-
-    if (input) input.value = bg;
-  }
-
-  if (cell) {
-    document.documentElement.style.setProperty(
-      "--cell",
-      cell
-    );
-
-    const input =
-      document.getElementById("cell-color");
-
-    if (input) input.value = cell;
-  }
-
-  if (text) {
-    document.documentElement.style.setProperty(
-      "--text",
-      text
-    );
-
-    const input =
-      document.getElementById("text-color");
-
-    if (input) input.value = text;
-  }
-
-  const storedSound =
-    localStorage.getItem("sudokuSound");
-
-  if (storedSound !== null) {
-    soundEnabled =
-      storedSound === "1";
-  }
-
-  const storedMusic =
-    localStorage.getItem("sudokuMusic");
-
-  if (storedMusic !== null) {
-    musicEnabled =
-      storedMusic === "1";
   }
 }
 
@@ -1297,7 +1932,9 @@ document.addEventListener(
   "keydown",
   event => {
 
-    if (paused) return;
+    if (paused || gameFinished) {
+      return;
+    }
 
     const key = event.key;
 
@@ -1324,60 +1961,75 @@ document.addEventListener(
       return;
     }
 
-    if (key === "ArrowUp") {
+    if (
+      key === "ArrowUp" ||
+      key === "ArrowDown" ||
+      key === "ArrowLeft" ||
+      key === "ArrowRight"
+    ) {
 
       event.preventDefault();
 
-      selectedRow =
-        Math.max(0, selectedRow - 1);
+      if (
+        selectedRow === -1 ||
+        selectedCol === -1
+      ) {
+        selectedRow = 0;
+        selectedCol = 0;
+        renderBoard();
+        return;
+      }
+
+      if (key === "ArrowUp") {
+        selectedRow =
+          Math.max(
+            0,
+            selectedRow - 1
+          );
+      }
+
+      if (key === "ArrowDown") {
+        selectedRow =
+          Math.min(
+            8,
+            selectedRow + 1
+          );
+      }
+
+      if (key === "ArrowLeft") {
+        selectedCol =
+          Math.max(
+            0,
+            selectedCol - 1
+          );
+      }
+
+      if (key === "ArrowRight") {
+        selectedCol =
+          Math.min(
+            8,
+            selectedCol + 1
+          );
+      }
 
       renderBoard();
-
       return;
     }
 
-    if (key === "ArrowDown") {
+    if (
+      key.toLowerCase() === "n"
+    ) {
 
-      event.preventDefault();
-
-      selectedRow =
-        Math.min(8, selectedRow + 1);
-
-      renderBoard();
-
-      return;
-    }
-
-    if (key === "ArrowLeft") {
-
-      event.preventDefault();
-
-      selectedCol =
-        Math.max(0, selectedCol - 1);
-
-      renderBoard();
-
-      return;
-    }
-
-    if (key === "ArrowRight") {
-
-      event.preventDefault();
-
-      selectedCol =
-        Math.min(8, selectedCol + 1);
-
-      renderBoard();
-
-      return;
-    }
-
-    if (key.toLowerCase() === "n") {
       toggleNotes();
+      return;
     }
 
-    if (key.toLowerCase() === "h") {
+    if (
+      key.toLowerCase() === "h"
+    ) {
+
       hint();
+      return;
     }
 
     if (key === " ") {
@@ -1395,128 +2047,10 @@ document.addEventListener(
 
 function setupButtons() {
 
-  // New Game
-  const newGameBtn =
-    document.getElementById("new-game");
-
-  if (newGameBtn) {
-    newGameBtn.addEventListener(
-      "click",
-      newGame
-    );
-  }
-
-  // Undo
-  const undoBtn =
-    document.getElementById("undo-btn");
-
-  if (undoBtn) {
-    undoBtn.addEventListener(
-      "click",
-      undoMove
-    );
-  }
-
-  // Hint
-  const hintBtn =
-    document.getElementById("hint-btn");
-
-  if (hintBtn) {
-    hintBtn.addEventListener(
-      "click",
-      hint
-    );
-  }
-
-  // Notes
-  const notesBtn =
-    document.getElementById("notes-btn");
-
-  if (notesBtn) {
-    notesBtn.addEventListener(
-      "click",
-      toggleNotes
-    );
-  }
-
-  // Pause
-  const pauseBtn =
-    document.getElementById("pause-btn");
-
-  if (pauseBtn) {
-    pauseBtn.addEventListener(
-      "click",
-      togglePause
-    );
-  }
-
-  // Settings
-  const settingsBtn =
-    document.getElementById("settings-btn");
-
-  if (settingsBtn) {
-    settingsBtn.addEventListener(
-      "click",
-      openSettings
-    );
-  }
-
-  // Close Settings
-  const closeSettingsBtn =
-    document.getElementById(
-      "close-settings"
-    );
-
-  if (closeSettingsBtn) {
-    closeSettingsBtn.addEventListener(
-      "click",
-      closeSettings
-    );
-  }
-
-  // Save Settings
-  const saveSettingsBtn =
-    document.getElementById(
-      "save-settings"
-    );
-
-  if (saveSettingsBtn) {
-    saveSettingsBtn.addEventListener(
-      "click",
-      saveSettings
-    );
-  }
-
-  // Number Pad
-  document
-    .querySelectorAll("[data-number]")
-    .forEach(btn => {
-
-      btn.addEventListener(
-        "click",
-        () => {
-
-          initAudio();
-
-          enterNumber(
-            Number(
-              btn.dataset.number
-            )
-          );
-        }
-      );
-    });
-
-  // Erase
-  const eraseBtn =
-    document.getElementById("erase-btn");
-
-  if (eraseBtn) {
-    eraseBtn.addEventListener(
-      "click",
-      eraseCell
-    );
-  }
+  // مهم:
+  // HTML فعلی شما onclick دارد.
+  // بنابراین دوباره click listener اضافه نمی‌کنیم
+  // تا روی اندروید دو بار اجرا نشود.
 
   // Difficulty
   document
@@ -1524,54 +2058,78 @@ function setupButtons() {
     .forEach(btn => {
 
       btn.addEventListener(
-        "click",
-        () => {
+        "pointerup",
+        event => {
+
+          event.preventDefault();
+
+          initAudio();
 
           const level =
+            btn.dataset.level ||
             btn.dataset.difficulty;
 
-          setDifficulty(level);
+          if (level) {
+            setDifficulty(level);
+          }
         }
       );
     });
 
-  // Resume
-  const resumeBtn =
-    document.getElementById(
-      "resume-btn"
-    );
+  // Number pad
+  document
+    .querySelectorAll(".number-pad button")
+    .forEach(btn => {
 
-  if (resumeBtn) {
-    resumeBtn.addEventListener(
-      "click",
-      togglePause
-    );
-  }
+      btn.addEventListener(
+        "pointerup",
+        event => {
 
-  // Win New Game
-  const winNewGameBtn =
-    document.getElementById(
-      "win-new-game"
-    );
+          event.preventDefault();
 
-  if (winNewGameBtn) {
-    winNewGameBtn.addEventListener(
-      "click",
-      () => {
+          initAudio();
 
-        const modal =
-          document.getElementById(
-            "win-modal"
-          );
+          const onclickText =
+            btn.getAttribute("onclick") || "";
 
-        if (modal) {
-          modal.classList.remove("show");
+          const match =
+            onclickText.match(
+              /selectNumber\s*\(\s*(\d+)\s*\)/
+            );
+
+          if (match) {
+
+            selectNumber(
+              Number(match[1])
+            );
+          }
         }
+      );
+    });
+}
 
-        newGame();
-      }
-    );
-  }
+// ===============================
+// MOBILE TOUCH SUPPORT
+// ===============================
+
+function setupTouchSupport() {
+
+  document.body.style.touchAction =
+    "manipulation";
+
+  document
+    .querySelectorAll("button")
+    .forEach(button => {
+
+      button.style.touchAction =
+        "manipulation";
+
+      button.style.webkitTapHighlightColor =
+        "transparent";
+
+      button.style.userSelect =
+        "none";
+    });
 }
 
 // ===============================
@@ -1583,7 +2141,10 @@ document.addEventListener(
   () => {
     initAudio();
   },
-  { once: true }
+  {
+    once: true,
+    passive: true
+  }
 );
 
 // ===============================
@@ -1598,54 +2159,9 @@ document.addEventListener(
 
     setupButtons();
 
+    setupTouchSupport();
+
     loadGame();
+
   }
 );
-// ===============================
-// 🔊 SIMPLE AUDIO TEST
-// ===============================
-
-document.addEventListener("click", function () {
-
-    const AudioContext =
-        window.AudioContext ||
-        window.webkitAudioContext;
-
-    if (!AudioContext) {
-        alert("مرورگر شما از صدا پشتیبانی نمی‌کند.");
-        return;
-    }
-
-    const audio = new AudioContext();
-
-    audio.resume().then(() => {
-
-        const oscillator = audio.createOscillator();
-        const gain = audio.createGain();
-
-        oscillator.type = "sine";
-        oscillator.frequency.setValueAtTime(800, audio.currentTime);
-
-        gain.gain.setValueAtTime(0.3, audio.currentTime);
-        gain.gain.exponentialRampToValueAtTime(
-            0.001,
-            audio.currentTime + 0.6
-        );
-
-        oscillator.connect(gain);
-        gain.connect(audio.destination);
-
-        oscillator.start();
-        oscillator.stop(audio.currentTime + 0.6);
-
-        console.log("🔊 SOUND TEST OK");
-
-    }).catch(error => {
-
-        console.error("Audio Error:", error);
-
-        alert("خطای صدا: " + error.message);
-
-    });
-
-}, { once: true });
