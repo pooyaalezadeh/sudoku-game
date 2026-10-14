@@ -62,6 +62,11 @@ jobs:
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
             -Pandroid.injected.signing.key.password="$KEYSTORE_PASSWORD"
 
+      - name: Verify APK signature
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          "$APKSIGNER" verify --verbose android/app/build/outputs/apk/release/app-release.apk
+
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
