@@ -1,0 +1,13 @@
+{
+  "name": "sudoku-game",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "echo Sudoku build ready"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/cli": "^7.4.3",
+    "@capacitor/core": "^7.4.3"
+  }
+}
