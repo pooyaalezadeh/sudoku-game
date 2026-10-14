@@ -1,14 +1,19 @@
 {
   "name": "sudoku-game",
   "version": "1.0.0",
+  "description": "Sudoku Game",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
-    "build": "echo Sudoku build ready"
+    "build": "echo Sudoku build ready",
+    "desktop": "electron-builder"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.3",
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^7.4.3",
     "@capacitor/core": "^7.4.3",
-    "@capacitor/assets": "^3.0.5"
+    "electron": "^38.2.2",
+    "electron-builder": "^26.0.12"
   }
 }
