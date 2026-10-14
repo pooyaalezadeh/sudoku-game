@@ -1,5 +1,5 @@
 {
   "appId": "com.poyatech.sudoku",
   "appName": "Sudoku",
-  "webDir": "."
+  "webDir": "www"
 }
