@@ -7,7 +7,7 @@
   "main": "electron/main.js",
   "scripts": {
     "build": "echo Sudoku build ready",
-    "desktop": "electron-builder --win"
+    "desktop": "electron-builder --win --publish never"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.3",
