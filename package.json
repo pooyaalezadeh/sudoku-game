@@ -16,6 +16,7 @@
   "build": {
     "appId": "com.poyatech.sudoku",
     "productName": "Sudoku",
+    "asar": true,
     "files": [
       "index.html",
       "script.js",
@@ -26,13 +27,25 @@
       "output": "dist"
     },
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Sudoku-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": false
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": "always",
+      "shortcutName": "Sudoku",
+      "runAfterFinish": false,
+      "deleteAppDataOnUninstall": true
     }
   }
 }
