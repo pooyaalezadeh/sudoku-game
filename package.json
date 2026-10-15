@@ -6,34 +6,27 @@
   "private": true,
   "main": "electron/main.js",
   "scripts": {
-    "build": "echo Sudoku build ready",
     "desktop": "electron-builder --win --publish never"
   },
-  "dependencies": {
-    "@capacitor/android": "^7.4.3",
-    "@capacitor/assets": "^3.0.5",
-    "@capacitor/cli": "^7.4.3",
-    "@capacitor/core": "^7.4.3"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "electron": "^38.2.2",
+    "electron": "^38.8.6",
     "electron-builder": "^26.15.3"
   },
   "build": {
     "appId": "com.poyatech.sudoku",
     "productName": "Sudoku",
-    "directories": {
-      "output": "dist"
-    },
     "files": [
       "index.html",
       "script.js",
       "style.css",
       "electron/**/*"
     ],
+    "directories": {
+      "output": "dist"
+    },
     "win": {
-      "target": "nsis",
-      "artifactName": "Sudoku-Setup-${version}.${ext}"
+      "target": "nsis"
     },
     "nsis": {
       "oneClick": false,
